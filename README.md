@@ -39,3 +39,4 @@ O backend será desenvolvido utilizando Python, Django e Django REST Framework
  
 O PostgreSQL será utilizado para armazenamento e persistência dos dados.
   
+ 
