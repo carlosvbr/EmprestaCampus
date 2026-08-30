@@ -5,30 +5,27 @@ from django.shortcuts import render, redirect
 from django.contrib.auth import authenticate, login
 from django.contrib import messages
 
-
 class RegistroView(generics.CreateAPIView):
     """
-    Endpoint público de cadastro de usuário.
-
-    Não exige autenticação (AllowAny), já que é justamente o passo que
-    cria a conta. A senha chega em texto puro na requisição, mas nunca
-    é salva assim: o RegistroSerializer.create() chama set_password,
-    que aplica hash (PBKDF2, padrão do Django) antes de gravar no banco.
+    Endpoint público de cadastro de usuário via API REST.
+    Não exige autenticação (AllowAny), pois atua como porta de entrada.
+    A senha é recebida em texto plano, mas o RegistroSerializer delega 
+    a criptografia ao set_password(), aplicando hash (PBKDF2) antes da 
+    persistência no banco PostgreSQL.
     """
     serializer_class = RegistroSerializer
     permission_classes = [permissions.AllowAny]
 
 def login_view(request):
     """
-    Interface visual de login para validação da disciplina.
-    Integra a checagem segura de credenciais utilizando os models 
-    já estruturados na base de dados PostgreSQL.
+    Interface visual (Stateful) para autenticação de usuários via web.
+    Integra a checagem segura de credenciais com o modelo do PostgreSQL.
     """
-    # Restringe a submissão ao método POST para proteger credenciais no payload da requisição
     if request.method == 'POST':
         usuario_digitado = request.POST.get('username')
         senha_digitada = request.POST.get('password')
-    # authenticate(): Abstrai a verificação de hash e previne SQL Injection na consulta
+
+        # authenticate(): Abstrai a verificação de hash e previne SQL Injection na consulta
         user = authenticate(request, username=usuario_digitado, password=senha_digitada)
 
         if user is not None:
@@ -41,3 +38,9 @@ def login_view(request):
 
     return render(request, 'usuarios/login.html')
 
+def home_view(request):
+    """
+    Endpoint de validação visual para comprovar a transição 
+    de estado após o login via front-end (Caminho Feliz).
+    """
+    return HttpResponse("<h1>Login bem-sucedido! Bem-vindo ao EmprestaCampus.</h1><p>Esta é a tela inicial provisória.</p>")
