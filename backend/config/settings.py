@@ -40,7 +40,8 @@ INSTALLED_APPS = [
     "rest_framework",
     "usuarios",
     "inventario",
-    "emprestimos"
+    "emprestimos",
+    "notificacoes"
 ]
 
 AUTH_USER_MODEL = "usuarios.Usuario"
