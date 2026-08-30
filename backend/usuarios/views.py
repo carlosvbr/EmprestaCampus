@@ -24,23 +24,20 @@ def login_view(request):
     Integra a checagem segura de credenciais utilizando os models 
     já estruturados na base de dados PostgreSQL.
     """
+    # Restringe a submissão ao método POST para proteger credenciais no payload da requisição
     if request.method == 'POST':
         usuario_digitado = request.POST.get('username')
         senha_digitada = request.POST.get('password')
-
+    # authenticate(): Abstrai a verificação de hash e previne SQL Injection na consulta
         user = authenticate(request, username=usuario_digitado, password=senha_digitada)
 
         if user is not None:
+            # login(): Acopla o usuário validado à sessão, gerando o cookie HTTP-only
             login(request, user)
             return redirect('home') 
         else:
+            # Mensagem genérica intencional para mitigar vulnerabilidade de Enumeração de Usuários
             messages.error(request, 'Credenciais inválidas. Verifique seu acesso e tente novamente.')
 
     return render(request, 'usuarios/login.html')
 
-def home_view(request):
-    """
-    View temporária apenas para confirmar que o login funcionou
-    e o redirecionamento foi feito com sucesso.
-    """
-    return HttpResponse("<h1>Login bem-sucedido! Bem-vindo ao EmprestaCampus.</h1><p>Esta é a tela inicial provisória.</p>")
