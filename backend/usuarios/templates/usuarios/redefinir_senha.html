@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Redefinir Senha - EmprestaCampus</title>
+</head>
+<body>
+    <div style="max-width: 400px; margin: 50px auto; font-family: Arial, sans-serif; text-align: center;">
+        <h2>Definir Nova Senha</h2>
+        <p>Insira a sua nova senha abaixo.</p>
+        
+        <!-- O action agora aponta diretamente para o endpoint correto da API -->
+        <form method="POST" action="/api/usuarios/redefinir-senha/">
+            {% csrf_token %}
+            
+            <!-- Campo oculto para enviar o token recuperado da URL -->
+            <input type="hidden" name="token" id="token-input">
+
+            <div style="margin-bottom: 15px; text-align: left;">
+                <label for="new_password" style="display: block; margin-bottom: 5px;">Nova Senha:</label>
+                <input type="password" name="new_password" id="new_password" required style="width: 100%; padding: 8px;">
+            </div>
+
+            <div style="margin-bottom: 15px; text-align: left;">
+                <label for="confirm_password" style="display: block; margin-bottom: 5px;">Confirme a Nova Senha:</label>
+                <input type="password" name="confirm_password" id="confirm_password" required style="width: 100%; padding: 8px;">
+            </div>
+            
+            <button type="submit" style="width: 100%; padding: 10px; background-color: #0056b3; color: white; border: none; cursor: pointer;">
+                Atualizar Senha
+            </button>
+        </form>
+    </div>
+
+    <!-- Script atualizado para decodificar e injetar o token corretamente -->
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const token = urlParams.get('token');
+        if (token) {
+            document.getElementById('token-input').value = decodeURIComponent(token);
+        }
+    </script>
+</body>
+</html>
