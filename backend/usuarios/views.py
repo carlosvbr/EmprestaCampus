@@ -9,6 +9,10 @@ from rest_framework import generics, permissions, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 
+import io
+import qrcode
+from django_otp.plugins.otp_totp.models import TOTPDevice
+
 from .serializers import RegistroSerializer
 from .models import LogAutenticacao, TokenRecuperacaoSenha, Usuario
 
@@ -132,6 +136,12 @@ def login_view(request):
     """
     Interface visual (Stateful) para autenticação de usuários via web.
     Integra a checagem segura de credenciais com o modelo do PostgreSQL.
+
+    Quando o usuário tem 2FA confirmado, a sessão NÃO é criada aqui.
+    Em vez disso, guardamos o id do usuário em request.session (fora da
+    sessão autenticada de verdade) e redirecionamos para a validação do
+    código. A sessão autenticada só existe depois do código correto,
+    em validar_dois_fatores_view.
     """
     if request.method == 'POST':
         usuario_digitado = request.POST.get('username')
@@ -141,6 +151,12 @@ def login_view(request):
         user = authenticate(request, username=usuario_digitado, password=senha_digitada)
 
         if user is not None:
+            tem_2fa = TOTPDevice.objects.filter(user=user, confirmed=True).exists()
+
+            if tem_2fa:
+                request.session['pre_2fa_user_id'] = user.id
+                return redirect('validar_2fa_web')
+
             # login(): Acopla o usuário validado à sessão, gerando o cookie HTTP-only
             login(request, user)
             return redirect('home')
@@ -158,6 +174,7 @@ def home_view(request):
     """
     return HttpResponse("<h1>Login bem-sucedido! Bem-vindo ao EmprestaCampus.</h1><p>Esta é a tela inicial provisória.</p>")
 
+
 def logout_view(request):
     """
     Encerra a sessão do usuário autenticado via web.
@@ -168,3 +185,117 @@ def logout_view(request):
     """
     logout(request)
     return redirect('login_web')
+
+
+class AtivarDoisFatoresView(APIView):
+    """
+    Cria um dispositivo TOTP não confirmado para o usuário autenticado
+    e devolve o QR Code (imagem PNG) para escanear no app autenticador.
+
+    O dispositivo só é considerado ativo de fato depois que o usuário
+    confirma o primeiro código gerado, em ConfirmarDoisFatoresView.
+    Antes da confirmação, ele existe mas não bloqueia o login (ver
+    device.confirmed).
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        TOTPDevice.objects.filter(user=request.user, confirmed=False).delete()
+
+        device = TOTPDevice.objects.create(
+            user=request.user,
+            name="dispositivo-padrao",
+            confirmed=False,
+        )
+
+        url_provisionamento = device.config_url
+
+        imagem = qrcode.make(url_provisionamento)
+        buffer = io.BytesIO()
+        imagem.save(buffer, format="PNG")
+
+        return HttpResponse(buffer.getvalue(), content_type="image/png")
+
+
+class ConfirmarDoisFatoresView(APIView):
+    """
+    Confirma o dispositivo TOTP pendente com o primeiro código gerado
+    pelo app autenticador. Sem essa confirmação, o dispositivo nunca
+    passa a exigir código no login (device.confirmed continua False).
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        codigo = request.data.get("codigo", "")
+
+        device = TOTPDevice.objects.filter(user=request.user, confirmed=False).first()
+
+        if not device:
+            return Response(
+                {"detail": "Nenhuma ativação de 2FA pendente para este usuário."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not device.verify_token(codigo):
+            LogAutenticacao.objects.create(
+                usuario=request.user,
+                email_informado=request.user.email,
+                tipo_evento=LogAutenticacao.TipoEvento.DOISFA_FALHA,
+                detalhe="Código inválido na confirmação da ativação",
+            )
+            return Response({"detail": "Código inválido."}, status=status.HTTP_400_BAD_REQUEST)
+
+        device.confirmed = True
+        device.save()
+
+        LogAutenticacao.objects.create(
+            usuario=request.user,
+            email_informado=request.user.email,
+            tipo_evento=LogAutenticacao.TipoEvento.DOISFA_ATIVADO,
+        )
+
+        return Response({"detail": "2FA ativado com sucesso."}, status=status.HTTP_200_OK)
+
+
+def validar_dois_fatores_view(request):
+    """
+    Segunda etapa do login para usuários com 2FA confirmado.
+
+    Só é possível chegar aqui depois de senha correta (login_view
+    guardou 'pre_2fa_user_id' na sessão). A sessão autenticada de
+    verdade (login()) só é criada se o código TOTP for válido.
+    """
+    user_id = request.session.get('pre_2fa_user_id')
+
+    if not user_id:
+        return redirect('login_web')
+
+    usuario = Usuario.objects.filter(id=user_id).first()
+
+    if request.method == 'POST':
+        codigo = request.POST.get('codigo', '')
+        device = TOTPDevice.objects.filter(user=usuario, confirmed=True).first()
+
+        if device and device.verify_token(codigo):
+            del request.session['pre_2fa_user_id']
+            login(request, usuario, backend='django.contrib.auth.backends.ModelBackend')
+
+            LogAutenticacao.objects.create(
+                usuario=usuario,
+                email_informado=usuario.email,
+                tipo_evento=LogAutenticacao.TipoEvento.DOISFA_SUCESSO,
+            )
+
+            return redirect('home')
+
+        LogAutenticacao.objects.create(
+            usuario=usuario,
+            email_informado=usuario.email,
+            tipo_evento=LogAutenticacao.TipoEvento.DOISFA_FALHA,
+            detalhe="Código incorreto no login",
+        )
+        messages.error(request, 'Código incorreto.')
+
+    return render(request, 'usuarios/validar_2fa.html')

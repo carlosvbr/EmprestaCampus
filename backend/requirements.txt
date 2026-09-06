@@ -4,3 +4,5 @@ psycopg[binary]
 python-decouple
 djangorestframework-simplejwt
 django-axes
+django-otp
+qrcode[pil]
