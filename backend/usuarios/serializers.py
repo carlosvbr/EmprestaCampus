@@ -20,6 +20,8 @@ class RegistroSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         senha = validated_data.pop("password")
+        if not validated_data.get("matricula"):
+            validated_data["matricula"] = None
         usuario = Usuario(**validated_data)
         usuario.set_password(senha)
         usuario.save()
