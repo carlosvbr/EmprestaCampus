@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     "emprestimos",
     "notificacoes",
     "auditoria",
+    "axes",
 ]
 
 AUTH_USER_MODEL = "usuarios.Usuario"
@@ -55,6 +56,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'axes.middleware.AxesMiddleware',
 ]
 
 ROOT_URLCONF = 'config.urls'
@@ -152,3 +154,35 @@ SIMPLE_JWT = {
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 DEFAULT_FROM_EMAIL = "naoresponda@empresta-campus.local"
 FRONTEND_URL = "http://localhost:5173"
+# Custo do PBKDF2 (hash de senha).
+#
+# 600.000 iterações é o mínimo recomendado pela OWASP (2023) para
+# PBKDF2-SHA256. O número fica declarado em usuarios/hashers.py, numa
+# subclasse do hasher padrão do Django, em vez de depender do valor
+# implícito da versão instalada do framework.
+PASSWORD_HASHERS = [
+    "usuarios.hashers.PBKDF2HasherReforcado",
+]
+# Expiração da sessão web (usada pelo login_view em usuarios/views.py).
+#
+# 1800 segundos = 30 minutos de inatividade. SESSION_SAVE_EVERY_REQUEST
+# renova a contagem a cada requisição, então o usuário só é deslogado
+# depois de 30 minutos sem nenhuma ação, não 30 minutos fixos desde o
+# login.
+SESSION_COOKIE_AGE = 1800
+SESSION_SAVE_EVERY_REQUEST = True
+SESSION_EXPIRE_AT_BROWSER_CLOSE = True
+# Proteção contra força bruta no login (item 1.11).
+#
+# django-axes intercepta tentativas de autenticação e bloqueia depois
+# de AXES_FAILURE_LIMIT tentativas erradas, por AXES_COOLOFF_TIME horas,
+# combinando IP e username (AXES_LOCKOUT_PARAMETERS). Isso cobre o
+# login_view (usuarios/views.py), que usa authenticate() do Django.
+AUTHENTICATION_BACKENDS = [
+    "axes.backends.AxesStandaloneBackend",
+    "django.contrib.auth.backends.ModelBackend",
+]
+
+AXES_FAILURE_LIMIT = 5
+AXES_COOLOFF_TIME = 0.5
+AXES_LOCKOUT_PARAMETERS = ["ip_address", "username"]

@@ -1,6 +1,6 @@
 ﻿from django.http import HttpResponse
 from django.shortcuts import render, redirect
-from django.contrib.auth import authenticate, login
+from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
 from django.core.mail import send_mail
 from django.conf import settings
@@ -102,6 +102,12 @@ class RedefinirSenhaView(APIView):
             return Response({"detail": motivo + "."}, status=status.HTTP_400_BAD_REQUEST)
 
         if len(nova_senha) < 8:
+            LogAutenticacao.objects.create(
+                usuario=token.usuario,
+                email_informado=token.usuario.email,
+                tipo_evento=LogAutenticacao.TipoEvento.RECUPERACAO_FALHA,
+                detalhe="Senha nova com menos de 8 caracteres",
+            )
             return Response(
                 {"detail": "A senha precisa ter ao menos 8 caracteres."},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -151,3 +157,14 @@ def home_view(request):
     de estado após o login via front-end (Caminho Feliz).
     """
     return HttpResponse("<h1>Login bem-sucedido! Bem-vindo ao EmprestaCampus.</h1><p>Esta é a tela inicial provisória.</p>")
+
+def logout_view(request):
+    """
+    Encerra a sessão do usuário autenticado via web.
+
+    logout() limpa os dados de sessão no servidor e invalida o cookie
+    de sessão do navegador, não apenas remove os dados do lado do
+    cliente. Uma sessão encerrada aqui não pode ser reaproveitada.
+    """
+    logout(request)
+    return redirect('login_web')

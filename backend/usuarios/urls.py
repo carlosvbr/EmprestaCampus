@@ -1,8 +1,7 @@
 ﻿from django.urls import path
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
-from .views import RegistroView, RedefinirSenhaView, SolicitarRecuperacaoSenhaView, login_view, home_view
-
+from .views import RegistroView, RedefinirSenhaView, SolicitarRecuperacaoSenhaView, login_view, home_view, logout_view
 urlpatterns = [
     # --- ROTAS DA API COM JWT
     path("registro/", RegistroView.as_view(), name="registro"),
@@ -14,4 +13,5 @@ urlpatterns = [
     # --- ROTAS DO FRONT-END HTML
     path("entrar/", login_view, name="login_web"),
     path("home/", home_view, name="home"),
+    path("sair/", logout_view, name="logout_web"),
 ]
