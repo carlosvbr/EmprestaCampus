@@ -1,0 +1,23 @@
+﻿<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Confirmar código - EmprestaCampus</title>
+</head>
+<body>
+    <h1>Digite o código do seu aplicativo autenticador</h1>
+
+    {% if messages %}
+        {% for message in messages %}
+            <p style="color: red;">{{ message }}</p>
+        {% endfor %}
+    {% endif %}
+
+    <form method="post">
+        {% csrf_token %}
+        <label for="codigo">Código de 6 dígitos:</label>
+        <input type="text" id="codigo" name="codigo" maxlength="6" autofocus required>
+        <button type="submit">Confirmar</button>
+    </form>
+</body>
+</html>

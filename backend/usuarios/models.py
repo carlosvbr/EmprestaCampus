@@ -70,26 +70,31 @@ class TokenRecuperacaoSenha(models.Model):
     def __str__(self):
         return f"Token de {self.usuario.username} (usado={self.usado})"
 
+
 class LogAutenticacao(models.Model):
     """
-    Registro de eventos ligados a autenticação e recuperação de senha.
+    Registro de eventos ligados a autenticação, recuperação de senha e 2FA.
 
     Existe separado da trilha de auditoria do empréstimo porque cobre
-    um domínio diferente: tentativas de acesso e recuperação de senha,
-    inclusive de solicitações que falham ou nunca chegam a virar um
-    usuário autenticado.
+    um domínio diferente: tentativas de acesso, recuperação de senha e
+    validação de segundo fator, inclusive de solicitações que falham ou
+    nunca chegam a virar um usuário autenticado.
     """
 
     class TipoEvento(models.TextChoices):
         SOLICITACAO_RECUPERACAO = "SOLICITACAO_RECUPERACAO", "Solicitação de recuperação"
         RECUPERACAO_SUCESSO = "RECUPERACAO_SUCESSO", "Recuperação concluída"
         RECUPERACAO_FALHA = "RECUPERACAO_FALHA", "Recuperação falhou"
+        DOISFA_ATIVADO = "DOISFA_ATIVADO", "2FA ativado"
+        DOISFA_DESATIVADO = "DOISFA_DESATIVADO", "2FA desativado"
+        DOISFA_SUCESSO = "DOISFA_SUCESSO", "2FA validado com sucesso"
+        DOISFA_FALHA = "DOISFA_FALHA", "2FA falhou"
 
     usuario = models.ForeignKey(
         Usuario, on_delete=models.SET_NULL, null=True, blank=True, related_name="logs_autenticacao"
     )
     email_informado = models.EmailField(
-        help_text="Guardado mesmo se o e-mail não existir no sistema, para fins de auditoria."
+        blank=True, help_text="Guardado mesmo se o e-mail não existir no sistema, para fins de auditoria."
     )
     tipo_evento = models.CharField(max_length=30, choices=TipoEvento.choices)
     detalhe = models.CharField(max_length=200, blank=True)
