@@ -13,6 +13,9 @@ class Papel(models.TextChoices):
     ADMIN = "ADMIN", "Administrador"
 
 
+from .crypto import CampoCriptografado
+
+
 class Usuario(AbstractUser):
     """
     Usuário do sistema, estendendo o modelo padrão do Django.
@@ -36,11 +39,15 @@ class Usuario(AbstractUser):
         blank=True,
         help_text="Matrícula institucional. Vazio para contas administrativas.",
     )
+    telefone = CampoCriptografado(
+        max_length=255,
+        null=True,
+        blank=True,
+        help_text="Telefone pessoal, armazenado criptografado com Fernet (item 3.4).",
+    )
 
     def __str__(self):
         return f"{self.get_full_name() or self.username} ({self.get_papel_display()})"
-
-
 class TokenRecuperacaoSenha(models.Model):
     """
     Token de uso único para redefinição de senha.

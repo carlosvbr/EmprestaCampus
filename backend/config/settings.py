@@ -190,3 +190,40 @@ AXES_FAILURE_LIMIT = 5
 AXES_COOLOFF_TIME = 0.5
 AXES_LOCKOUT_PARAMETERS = ["ip_address", "username"]
 
+# Cookies e headers seguros (item 3.3).
+#
+# *_SECURE = True: cookies só trafegam se a conexão for HTTPS. Em
+# desenvolvimento local sem HTTPS ainda configurado, isso bloquearia o
+# próprio login, então fica atrelado à variável DEBUG: só ativa de
+# verdade quando o projeto não estiver em modo de desenvolvimento.
+SESSION_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = not DEBUG
+
+# Impede que o navegador tente adivinhar o tipo de um arquivo diferente
+# do que o servidor declarou, evitando ataques de MIME sniffing.
+SECURE_CONTENT_TYPE_NOSNIFF = True
+
+# Impede que o site seja carregado dentro de um <iframe> em outro
+# domínio, prevenindo ataques de clickjacking.
+X_FRAME_OPTIONS = "DENY"
+
+# HSTS: instrui o navegador a lembrar, pelos próximos 30 dias, que este
+# site só deve ser acessado via HTTPS, mesmo que o usuário digite
+# "http://" manualmente. Só faz sentido com HTTPS já funcionando.
+SECURE_HSTS_SECONDS = 60 * 60 * 24 * 30 if not DEBUG else 0
+SECURE_HSTS_INCLUDE_SUBDOMAINS = not DEBUG
+
+# Bloqueio de conexão insegura, camada do Django (item 3.2).
+#
+# O Nginx já redireciona HTTP -> HTTPS antes de chegar aqui. Esta
+# camada é redundante de propósito: se o Django for exposto direto
+# algum dia (sem Nginx na frente), ainda assim força HTTPS sozinho.
+SECURE_SSL_REDIRECT = not DEBUG
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+# Chave de criptografia para dados pessoais em repouso (item 3.4/3.6).
+#
+# Separada da SECRET_KEY de propósito: a SECRET_KEY do Django assina
+# sessões e tokens, não foi feita para criptografar dados de negócio.
+# Usar chaves diferentes para propósitos diferentes limita o dano se
+# uma delas vazar.
+ENCRYPTION_KEY = env("ENCRYPTION_KEY")
