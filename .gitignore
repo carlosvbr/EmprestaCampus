@@ -10,3 +10,5 @@ env/
 __pycache__/
 *.pyc
 db.sqlite3
+# Certificados TLS locais (gerados, nao sao codigo)
+nginx/certs/
