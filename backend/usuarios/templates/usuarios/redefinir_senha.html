@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Redefinir Senha - EmprestaCampus</title>
+</head>
+<body>
+    <div style="max-width: 400px; margin: 50px auto; font-family: Arial, sans-serif; text-align: center;">
+        <h2>Definir Nova Senha</h2>
+        <p>Insira a sua nova senha abaixo.</p>
+        
+        <!-- Removido o action nativo para tratar via JavaScript -->
+        <form id="form-redefinir">
+            <!-- Campo oculto para armazenar o token recuperado da URL -->
+            <input type="hidden" name="token" id="token-input">
+
+            <div style="margin-bottom: 15px; text-align: left;">
+                <label for="password" style="display: block; margin-bottom: 5px;">Nova Senha:</label>
+                <input type="password" name="password" id="password" required style="width: 100%; padding: 8px;">
+            </div>
+
+            <div style="margin-bottom: 15px; text-align: left;">
+                <label for="confirm_password" style="display: block; margin-bottom: 5px;">Confirme a Nova Senha:</label>
+                <input type="password" id="confirm_password" required style="width: 100%; padding: 8px;">
+            </div>
+            
+            <button type="submit" style="width: 100%; padding: 10px; background-color: #0056b3; color: white; border: none; cursor: pointer;">
+                Atualizar Senha
+            </button>
+        </form>
+
+        <!-- Div para exibir o feedback de sucesso ou erro na tela -->
+        <div id="mensagem" style="margin-top: 15px; font-weight: bold;"></div>
+    </div>
+
+    <script>
+        // 1. Captura e injeta o token da URL ao carregar a página
+        const urlParams = new URLSearchParams(window.location.search);
+        const token = urlParams.get('token');
+        if (token) {
+            document.getElementById('token-input').value = decodeURIComponent(token);
+        }
+
+        // 2. Intercepta o envio do formulário para enviar via JSON para a API
+        const form = document.getElementById('form-redefinir');
+        const mensagemDiv = document.getElementById('mensagem');
+
+        form.addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const tokenVal = document.getElementById('token-input').value;
+            const passwordVal = document.getElementById('password').value;
+            const confirmVal = document.getElementById('confirm_password').value;
+
+            // Validação simples de igualdade das senhas no front-end
+            if (passwordVal !== confirmVal) {
+                mensagemDiv.style.color = 'red';
+                mensagemDiv.textContent = 'As senhas não coincidem.';
+                return;
+            }
+
+            if (!tokenVal) {
+                mensagemDiv.style.color = 'red';
+                mensagemDiv.textContent = 'Token de recuperação ausente.';
+                return;
+            }
+
+            try {
+                // Requisição POST em formato JSON para a nossa API validada
+                const response = await fetch('/api/usuarios/redefinir-senha/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        token: tokenVal,
+                        password: passwordVal
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    mensagemDiv.style.color = 'green';
+                    mensagemDiv.textContent = 'Senha redefinida com sucesso! Redirecionando...';
+                    setTimeout(() => {
+                        window.location.href = '/api/usuarios/entrar/';
+                    }, 2000);
+                } else {
+                    mensagemDiv.style.color = 'red';
+                    mensagemDiv.textContent = data.detail || 'Erro ao redefinir a senha.';
+                }
+            } catch (error) {
+                mensagemDiv.style.color = 'red';
+                mensagemDiv.textContent = 'Erro de conexão com o servidor.';
+            }
+        });
+    </script>
+</body>
+</html>

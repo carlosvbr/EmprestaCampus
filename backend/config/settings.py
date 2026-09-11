@@ -164,6 +164,7 @@ FRONTEND_URL = "http://localhost:5173"
 # implícito da versão instalada do framework.
 PASSWORD_HASHERS = [
     "usuarios.hashers.PBKDF2HasherReforcado",
+    "django.contrib.auth.hashers.PBKDF2PasswordHasher"
 ]
 # Expiração da sessão web (usada pelo login_view em usuarios/views.py).
 #

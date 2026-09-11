@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Recuperar Senha - EmprestaCampus</title>
+</head>
+<body>
+    <div style="max-width: 400px; margin: 50px auto; font-family: Arial, sans-serif; text-align: center;">
+        <h2>Esqueci minha senha</h2>
+        <p>Informe o e-mail cadastrado. Enviaremos um link seguro para a redefinição.</p>
+        
+        <!-- Formulário interceptado via JavaScript -->
+        <form id="form-recuperar">
+            <div style="margin-bottom: 15px; text-align: left;">
+                <label for="email" style="display: block; margin-bottom: 5px;">E-mail:</label>
+                <input type="email" name="email" id="email" required style="width: 100%; padding: 8px;">
+            </div>
+            
+            <button type="submit" style="width: 100%; padding: 10px; background-color: #0056b3; color: white; border: none; cursor: pointer;">
+                Enviar link de recuperação
+            </button>
+        </form>
+
+        <!-- Div para exibir o feedback visual da solicitação -->
+        <div id="mensagem" style="margin-top: 15px; font-weight: bold;"></div>
+        
+        <div style="margin-top: 15px;">
+            <a href="{% url 'login_web' %}" style="color: #0056b3; text-decoration: none;">Voltar para o Login</a>
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById('form-recuperar');
+        const mensagemDiv = document.getElementById('mensagem');
+
+        form.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const emailVal = document.getElementById('email').value;
+
+            try {
+                // Dispara a requisição em JSON para o endpoint da API que validamos
+                const response = await fetch('/api/usuarios/recuperar-senha/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        email: emailVal
+                    })
+                });
+
+                const data = await response.json();
+
+                // O back-end sempre responde 200 por segurança contra enumeração de e-mails
+                if (response.ok) {
+                    mensagemDiv.style.color = 'green';
+                    mensagemDiv.textContent = 'Se o e-mail existir no sistema, um link de recuperação foi enviado. Verifique seu terminal/console.';
+                } else {
+                    mensagemDiv.style.color = 'red';
+                    mensagemDiv.textContent = data.detail || 'Ocorreu um erro ao processar a solicitação.';
+                }
+            } catch (error) {
+                mensagemDiv.style.color = 'red';
+                mensagemDiv.textContent = 'Erro de conexão com o servidor.';
+            }
+        });
+    </script>
+</body>
+</html>
