@@ -1,6 +1,7 @@
 ﻿from django.urls import path
 from django.views.generic import TemplateView
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from . import views
 
 from .views import (
     RegistroView,
@@ -32,4 +33,9 @@ urlpatterns = [
     path("esqueci-minha-senha/confirmar/", TemplateView.as_view(template_name="usuarios/redefinir_senha.html"), name="redefinir_senha_web"),
     path("2fa/validar/", validar_dois_fatores_view, name="validar_2fa_web"),
     path("cadastrar/", TemplateView.as_view(template_name="usuarios/cadastro.html"), name="cadastro_web"),
+    path('perfil/', views.perfil_view, name='perfil'),
+    path('perfil/exportar/', views.exportar_dados_view, name='exportar_dados'),
+    path('perfil/2fa/', views.configurar_2fa_view, name='configurar_2fa'),
+    path('perfil/revogar-consentimento/', views.revogar_consentimento_view, name='revogar_consentimento'),
+    path('perfil/encerrar-conta/', views.encerrar_conta_view, name='encerrar_conta'),
 ]

@@ -1,6 +1,7 @@
-﻿from django.http import HttpResponse
+﻿from django.http import JsonResponse, HttpResponse
 from django.shortcuts import render, redirect
 from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.mail import send_mail
 from django.conf import settings
@@ -167,12 +168,12 @@ def login_view(request):
     return render(request, 'usuarios/login.html')
 
 
+@login_required(login_url='/api/usuarios/entrar/')
 def home_view(request):
     """
-    Endpoint de validação visual para comprovar a transição
-    de estado após o login via front-end (Caminho Feliz).
+    Endpoint da tela inicial (Dashboard) após login bem-sucedido.
     """
-    return HttpResponse("<h1>Login bem-sucedido! Bem-vindo ao EmprestaCampus.</h1><p>Esta é a tela inicial provisória.</p>")
+    return render(request, 'usuarios/home.html')
 
 
 def logout_view(request):
@@ -299,3 +300,32 @@ def validar_dois_fatores_view(request):
         messages.error(request, 'Código incorreto.')
 
     return render(request, 'usuarios/validar_2fa.html')
+
+@login_required
+def perfil_view(request):
+    # Renderiza a tela "Meu Perfil"
+    return render(request, 'usuarios/perfil.html')
+
+@login_required
+def exportar_dados_view(request):
+    # Placeholder: Futuramente gerará o JSON com os dados do usuário (LGPD 4.9)
+    return JsonResponse({"mensagem": "A exportação de dados será implementada aqui."})
+
+@login_required
+def configurar_2fa_view(request):
+    # Placeholder: Renderizará o QR Code e a ativação do 2FA
+    return HttpResponse("Página de configuração do 2FA em construção.")
+
+@login_required
+def revogar_consentimento_view(request):
+    if request.method == 'POST':
+        # Placeholder: Lógica para alterar o status do consentimento (LGPD 4.6)
+        return HttpResponse("Preferências de privacidade atualizadas.")
+    return redirect('perfil')
+
+@login_required
+def encerrar_conta_view(request):
+    if request.method == 'POST':
+        # Placeholder: Lógica de anonimização (LGPD 4.10)
+        return HttpResponse("Conta encerrada e dados anonimizados.")
+    return redirect('perfil')

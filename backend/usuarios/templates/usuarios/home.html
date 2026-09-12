@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Início - EmprestaCampus</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; background-color: #f3f4f6; color: #333; }
+        .navbar { background-color: #2563eb; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; color: white; }
+        .navbar h1 { margin: 0; font-size: 20px; }
+        .navbar-links a { color: white; text-decoration: none; margin-left: 20px; font-weight: bold; font-size: 14px; }
+        .navbar-links a:hover { text-decoration: underline; }
+        .container { max-width: 1000px; margin: 40px auto; padding: 20px; }
+        .welcome-header { margin-bottom: 30px; }
+        .cards-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; }
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); text-align: center; }
+        .card h3 { margin-top: 0; color: #2563eb; }
+        .btn-action { display: inline-block; margin-top: 15px; padding: 10px 20px; background-color: #2563eb; color: white; text-decoration: none; border-radius: 4px; font-weight: bold; }
+        .btn-action:hover { background-color: #1d4ed8; }
+    </style>
+</head>
+<body>
+
+    <nav class="navbar">
+        <h1>EmprestaCampus</h1>
+        <div class="navbar-links">
+            <a href="#">Equipamentos</a>
+            <a href="#">Meus Empréstimos</a>
+            <a href="{% url 'perfil' %}">Meu Perfil</a>
+            <a href="{% url 'logout_web' %}">Sair</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="welcome-header">
+            <!-- Usa a tag do Django para mostrar o nome do usuário logado dinamicamente -->
+            <h2>Olá, {{ request.user.first_name|default:"Usuário" }}!</h2>
+            <p>Bem-vindo ao sistema de controle de empréstimos do campus.</p>
+        </div>
+
+        <div class="cards-grid">
+            <div class="card">
+                <h3>Solicitar Equipamento</h3>
+                <p>Navegue pelo catálogo e reserve o que você precisa para suas aulas ou projetos.</p>
+                <a href="#" class="btn-action">Ver Catálogo</a>
+            </div>
+            
+            <div class="card">
+                <h3>Meus Empréstimos</h3>
+                <p>Acompanhe o status das suas solicitações e verifique prazos de devolução.</p>
+                <a href="#" class="btn-action">Acessar Histórico</a>
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>
