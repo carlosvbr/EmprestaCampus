@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Criar Conta - EmprestaCampus</title>
+    <style>
+        body { font-family: Arial, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; background-color: #f3f4f6; margin: 0; padding: 20px; }
+        .login-box { background: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); width: 100%; max-width: 450px; }
+        .login-box h2 { text-align: center; margin-bottom: 20px; color: #333; }
+        .input-group { margin-bottom: 15px; }
+        .input-group label { display: block; margin-bottom: 5px; color: #666; font-weight: bold; font-size: 14px; }
+        .input-group input, .input-group select { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; background-color: #fff; }
+        .checkbox-group { display: flex; align-items: flex-start; margin-bottom: 20px; font-size: 13px; color: #555; line-height: 1.4; }
+        .checkbox-group input { margin-top: 2px; margin-right: 10px; }
+        .btn-login { width: 100%; padding: 10px; background-color: #2563eb; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; font-weight: bold; }
+        .btn-login:hover { background-color: #1d4ed8; }
+        #mensagem { text-align: center; margin-top: 15px; font-weight: bold; font-size: 14px; }
+    </style>
+</head>
+<body>
+
+<div class="login-box">
+    <h2>Criar Conta</h2>
+    
+    <form id="form-cadastro">
+        <div class="input-group">
+            <label for="username">Nome de Usuário</label>
+            <input type="text" id="username" required placeholder="Ex: joao.silva">
+        </div>
+
+        <div class="input-group">
+            <label for="first_name">Nome</label>
+            <input type="text" id="first_name" required placeholder="Seu primeiro nome">
+        </div>
+
+        <div class="input-group">
+            <label for="last_name">Sobrenome</label>
+            <input type="text" id="last_name" required placeholder="Seu sobrenome">
+        </div>
+
+        <div class="input-group">
+            <label for="email">E-mail Institucional</label>
+            <input type="email" id="email" required placeholder="joao@aluno.instituicao.br">
+        </div>
+
+        <div class="input-group">
+            <label for="matricula">Matrícula</label>
+            <input type="text" id="matricula" placeholder="Digite sua matrícula">
+        </div>
+
+        <div class="input-group">
+            <label for="telefone">Telefone</label>
+            <input type="text" id="telefone" required placeholder="(11) 99999-9999">
+        </div>
+
+        <div class="input-group">
+            <label for="papel">Vínculo / Papel no Sistema</label>
+            <select id="papel" required>
+                <option value="ALUNO">Aluno</option>
+                <option value="DOCENTE">Docente</option>
+                <option value="TECNICO">Técnico</option>
+            </select>
+        </div>
+        
+        <div class="input-group">
+            <label for="password">Senha</label>
+            <input type="password" id="password" required minlength="8" placeholder="Mínimo de 8 caracteres">
+        </div>
+
+        <div class="checkbox-group">
+            <input type="checkbox" id="consentimento" required>
+            <label for="consentimento">
+                Declaro que li e concordo com a coleta e tratamento dos meus dados pessoais, conforme a Política de Privacidade.
+            </label>
+        </div>
+        
+        <button type="submit" class="btn-login">Cadastrar</button>
+    </form>
+
+    <div id="mensagem"></div>
+
+    <div style="margin-top: 20px; text-align: center;">
+        <a href="{% url 'login_web' %}" style="color: #2563eb; text-decoration: none; font-size: 14px;">
+            Já tem uma conta? Voltar ao login
+        </a>
+    </div>
+</div>
+
+<script>
+    const form = document.getElementById('form-cadastro');
+    const mensagemDiv = document.getElementById('mensagem');
+
+    form.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        mensagemDiv.style.color = '#555';
+        mensagemDiv.textContent = 'Processando cadastro...';
+
+        const payload = {
+            username: document.getElementById('username').value,
+            first_name: document.getElementById('first_name').value,
+            last_name: document.getElementById('last_name').value,
+            email: document.getElementById('email').value,
+            matricula: document.getElementById('matricula').value || null,
+            telefone: document.getElementById('telefone').value,
+            papel: document.getElementById('papel').value,
+            password: document.getElementById('password').value
+        };
+
+        try {
+            const response = await fetch('/api/usuarios/registro/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            });
+
+            if (response.ok) {
+                mensagemDiv.style.color = 'green';
+                mensagemDiv.textContent = 'Cadastro realizado com sucesso! Redirecionando...';
+                setTimeout(() => {
+                    window.location.href = '/api/usuarios/entrar/';
+                }, 2000);
+            } else {
+                const data = await response.json();
+                mensagemDiv.style.color = 'red';
+                if (data.username) {
+                    mensagemDiv.textContent = 'Este nome de usuário já está em uso. Escolha outro.';
+                } else {
+                const primeiroErro = Object.values(data)[0];
+                mensagemDiv.textContent = Array.isArray(primeiroErro) ? primeiroErro[0] : 'Verifique os dados informados.';
+                }
+            }
+        } catch (error) {
+            mensagemDiv.style.color = 'red';
+            mensagemDiv.textContent = 'Erro de conexão com o servidor.';
+        }
+    });
+</script>
+</body>
+</html>

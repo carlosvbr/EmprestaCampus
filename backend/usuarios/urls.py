@@ -31,4 +31,5 @@ urlpatterns = [
     path("esqueci-minha-senha/", TemplateView.as_view(template_name="usuarios/recuperar_senha.html"), name="recuperar_senha_web"),
     path("esqueci-minha-senha/confirmar/", TemplateView.as_view(template_name="usuarios/redefinir_senha.html"), name="redefinir_senha_web"),
     path("2fa/validar/", validar_dois_fatores_view, name="validar_2fa_web"),
+    path("cadastrar/", TemplateView.as_view(template_name="usuarios/cadastro.html"), name="cadastro_web"),
 ]

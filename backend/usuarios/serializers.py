@@ -13,15 +13,16 @@ class RegistroSerializer(serializers.ModelSerializer):
     """
 
     password = serializers.CharField(write_only=True, min_length=8)
+    first_name = serializers.CharField(required=True)
+    last_name = serializers.CharField(required=True)
+    matricula = serializers.CharField(required=True, max_length=20)
 
     class Meta:
         model = Usuario
-        fields = ["id", "username", "email", "password", "papel", "matricula"]
+        fields = ["id", "username","first_name","last_name","email", "password", "papel", "matricula","telefone"]
 
     def create(self, validated_data):
         senha = validated_data.pop("password")
-        if not validated_data.get("matricula"):
-            validated_data["matricula"] = None
         usuario = Usuario(**validated_data)
         usuario.set_password(senha)
         usuario.save()

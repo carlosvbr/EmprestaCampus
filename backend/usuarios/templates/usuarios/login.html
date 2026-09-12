@@ -14,6 +14,9 @@
         .btn-login { width: 100%; padding: 10px; background-color: #2563eb; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; font-weight: bold; }
         .btn-login:hover { background-color: #1d4ed8; }
         .messages { color: #dc2626; text-align: center; margin-bottom: 15px; font-weight: bold; background-color: #fee2e2; padding: 10px; border-radius: 4px; }
+        .links-container { margin-top: 15px; text-align: center; display: flex; flex-direction: column; gap: 8px; }
+        .links-container a { color: #2563eb; text-decoration: none; font-size: 14px; }
+        .links-container a:hover { text-decoration: underline; }
     </style>
 </head>
 <body>
@@ -47,9 +50,12 @@
         <button type="submit" class="btn-login">Entrar no EmprestaCampus</button>
     </form>
 
-    <div style="margin-top: 15px; text-align: center;">
-        <a href="{% url 'recuperar_senha_web' %}" style="color: #2563eb; text-decoration: none; font-size: 14px;">
+    <div class="links-container">
+        <a href="{% url 'recuperar_senha_web' %}">
             Esqueci minha senha
+        </a>
+        <a href="{% url 'cadastro_web' %}">
+            Ainda não tem conta? Cadastre-se
         </a>
     </div>
 </div>
