@@ -1,23 +1,32 @@
-﻿<!DOCTYPE html>
-<html lang="pt-br">
+﻿
+<!DOCTYPE html>
+<html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <title>Confirmar código - EmprestaCampus</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verificação 2FA - EmprestaCampus</title>
 </head>
-<body>
-    <h1>Digite o código do seu aplicativo autenticador</h1>
+<body style="font-family: sans-serif; max-width: 400px; margin: 60px auto; line-height: 1.6; text-align: center;">
+
+    <h2>Verificação de Segurança</h2>
+    <p style="color: #4b5563; margin-bottom: 20px;">Digite o código de 6 dígitos gerado pelo seu aplicativo autenticador para acessar o sistema.</p>
 
     {% if messages %}
-        {% for message in messages %}
-            <p style="color: red;">{{ message }}</p>
-        {% endfor %}
+        <div style="background-color: #fee2e2; color: #991b1b; padding: 10px; border-radius: 5px; margin-bottom: 20px;">
+            {% for message in messages %}
+                {{ message }}
+            {% endfor %}
+        </div>
     {% endif %}
 
-    <form method="post">
+    <form method="POST" style="border: 1px solid #e5e7eb; padding: 30px; border-radius: 8px; background-color: #f9fafb;">
         {% csrf_token %}
-        <label for="codigo">Código de 6 dígitos:</label>
-        <input type="text" id="codigo" name="codigo" maxlength="6" autofocus required>
-        <button type="submit">Confirmar</button>
+        <input type="text" name="codigo" required placeholder="000000" maxlength="6" autofocus
+               style="padding: 12px; font-size: 24px; width: 150px; text-align: center; letter-spacing: 4px; border: 1px solid #d1d5db; border-radius: 5px; margin-bottom: 20px;">
+        <br>
+        <button type="submit" style="padding: 12px 24px; font-size: 16px; background-color: #2563eb; color: white; border: none; border-radius: 5px; cursor: pointer; width: 100%;">
+            Entrar
+        </button>
     </form>
 </body>
 </html>

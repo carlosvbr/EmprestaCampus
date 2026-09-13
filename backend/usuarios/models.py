@@ -5,15 +5,14 @@ from django.contrib.auth.models import AbstractUser
 from django.db import models
 from django.utils import timezone
 
+from .crypto import CampoCriptografado
+
 
 class Papel(models.TextChoices):
     ALUNO = "ALUNO", "Aluno"
     DOCENTE = "DOCENTE", "Docente"
     TECNICO = "TECNICO", "Técnico"
     ADMIN = "ADMIN", "Administrador"
-
-
-from .crypto import CampoCriptografado
 
 
 class Usuario(AbstractUser):
@@ -46,8 +45,34 @@ class Usuario(AbstractUser):
         help_text="Telefone pessoal, armazenado criptografado com Fernet (item 3.4).",
     )
 
+    # --- LGPD: Trilha de Consentimento ---
+    consentimento_dados = models.BooleanField(
+        default=False, 
+        help_text="Indica se o usuário aceitou os termos de uso e privacidade (LGPD 4.4 e 4.5)"
+    )
+    data_consentimento = models.DateTimeField(
+        null=True, 
+        blank=True, 
+        help_text="Data e hora exata do aceite (LGPD 4.7)"
+    )
+    versao_documento_aceito = models.CharField(
+        max_length=10, 
+        blank=True, 
+        null=True, 
+        help_text="Versão da Política de Privacidade aceita (ex: v1.0) (LGPD 4.7)"
+    )
+
+    def save(self, *args, **kwargs):
+        # Se o consentimento foi marcado como True e não tem data, registra a data exata agora
+        if self.consentimento_dados and not self.data_consentimento:
+            self.data_consentimento = timezone.now()
+            self.versao_documento_aceito = "v1.0" 
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return f"{self.get_full_name() or self.username} ({self.get_papel_display()})"
+
+
 class TokenRecuperacaoSenha(models.Model):
     """
     Token de uso único para redefinição de senha.

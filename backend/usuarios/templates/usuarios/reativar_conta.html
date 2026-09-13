@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reativar Conta - EmprestaCampus</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center p-4">
+
+    <div class="bg-white p-8 rounded-lg shadow max-w-md w-full text-center">
+        <h2 class="text-xl font-bold text-red-600 mb-4">Conta Suspensa por LGPD</h2>
+        <p class="text-gray-600 text-sm mb-6">
+            O acesso a esta conta foi desativada porque você revogou o consentimento de tratamento de dados pessoais. Para voltar a utilizar o sistema de empréstimos, é necessário concordar novamente com os termos.
+        </p>
+
+        <form method="POST">
+            {% csrf_token %}
+            <button type="submit" class="w-full bg-blue-600 text-white p-3 rounded font-semibold hover:bg-blue-700 transition">
+                Restaurar Consentimento e Reativar Conta
+            </button>
+        </form>
+
+        <div class="mt-4">
+            <a href="{% url 'login_web' %}" class="text-sm text-gray-500 hover:underline">Voltar ao Login</a>
+        </div>
+    </div>
+
+</body>
+</html>

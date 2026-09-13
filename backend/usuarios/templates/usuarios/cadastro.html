@@ -71,7 +71,7 @@
         <div class="checkbox-group">
             <input type="checkbox" id="consentimento" required>
             <label for="consentimento">
-                Declaro que li e concordo com a coleta e tratamento dos meus dados pessoais, conforme a Política de Privacidade.
+                Declaro que li e concordo com a coleta e tratamento dos meus dados pessoais, conforme a Política de Privacidade (LGPD).
             </label>
         </div>
         
@@ -97,6 +97,7 @@
         mensagemDiv.style.color = '#555';
         mensagemDiv.textContent = 'Processando cadastro...';
 
+        // Captura o payload incluindo o estado booleano do checkbox de consentimento
         const payload = {
             username: document.getElementById('username').value,
             first_name: document.getElementById('first_name').value,
@@ -105,7 +106,8 @@
             matricula: document.getElementById('matricula').value || null,
             telefone: document.getElementById('telefone').value,
             papel: document.getElementById('papel').value,
-            password: document.getElementById('password').value
+            password: document.getElementById('password').value,
+            consentimento_dados: document.getElementById('consentimento').checked // <--- O ajuste principal
         };
 
         try {
@@ -129,8 +131,8 @@
                 if (data.username) {
                     mensagemDiv.textContent = 'Este nome de usuário já está em uso. Escolha outro.';
                 } else {
-                const primeiroErro = Object.values(data)[0];
-                mensagemDiv.textContent = Array.isArray(primeiroErro) ? primeiroErro[0] : 'Verifique os dados informados.';
+                    const primeiroErro = Object.values(data)[0];
+                    mensagemDiv.textContent = Array.isArray(primeiroErro) ? primeiroErro[0] : 'Verifique os dados informados.';
                 }
             }
         } catch (error) {

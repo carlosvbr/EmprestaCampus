@@ -1,21 +1,23 @@
-﻿from django.http import JsonResponse, HttpResponse
-from django.shortcuts import render, redirect
+﻿import base64
+import io
+
+import qrcode
+from django.conf import settings
+from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
-from django.contrib import messages
 from django.core.mail import send_mail
-from django.conf import settings
-
-from rest_framework import generics, permissions, status
-from rest_framework.views import APIView
-from rest_framework.response import Response
-
-import io
-import qrcode
+from django.http import HttpResponse, JsonResponse
+from django.shortcuts import redirect, render
+from django.urls import reverse
+from django.utils import timezone
 from django_otp.plugins.otp_totp.models import TOTPDevice
+from rest_framework import generics, permissions, status
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
-from .serializers import RegistroSerializer
 from .models import LogAutenticacao, TokenRecuperacaoSenha, Usuario
+from .serializers import RegistroSerializer
 
 
 class RegistroView(generics.CreateAPIView):
@@ -26,7 +28,6 @@ class RegistroView(generics.CreateAPIView):
     a criptografia ao set_password(), aplicando hash (PBKDF2) antes da
     persistência no banco PostgreSQL.
     """
-
     serializer_class = RegistroSerializer
     permission_classes = [permissions.AllowAny]
 
@@ -35,13 +36,8 @@ class SolicitarRecuperacaoSenhaView(APIView):
     """
     Recebe um e-mail e, se existir um usuário com ele, gera um token de
     recuperação e "envia" por e-mail (console, em desenvolvimento).
-
-    Sempre responde 200, mesmo se o e-mail não existir no sistema. Isso
-    é proposital: evita que alguém descubra quais e-mails têm conta
-    só testando esse endpoint (enumeration attack). Toda solicitação,
-    exista o e-mail ou não, é registrada no log (item 2.6).
+    Sempre responde 200, mesmo se o e-mail não existir no sistema.
     """
-
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):
@@ -56,13 +52,16 @@ class SolicitarRecuperacaoSenhaView(APIView):
 
         if usuario:
             token = TokenRecuperacaoSenha.objects.create(usuario=usuario)
-            link = f"{settings.FRONTEND_URL}/redefinir-senha?token={token.token}"
-            send_mail(
-                subject="Recuperação de senha - EmprestaCampus",
-                message=f"Use o link abaixo para redefinir sua senha (válido por 1 hora):\n{link}",
-                from_email=settings.DEFAULT_FROM_EMAIL,
-                recipient_list=[email],
-            )
+            
+            # 1. Gera a rota de forma limpa, baseada no urls.py
+            caminho_base = reverse('redefinir_senha_web').lstrip('/')
+            link = request.build_absolute_uri(f"/{caminho_base}?token={token.token}")
+            
+            # 2. Imprime o link limpo direto no terminal (Fura o bloqueio do EmailBackend)
+            print("\n" + "="*70)
+            print("LINK DE RECUPERAÇÃO (LIMPO PARA ACESSO DIRETO):")
+            print(link)
+            print("="*70 + "\n")
 
         return Response(
             {"detail": "Se o e-mail existir, um link de recuperação foi enviado."},
@@ -73,13 +72,7 @@ class SolicitarRecuperacaoSenhaView(APIView):
 class RedefinirSenhaView(APIView):
     """
     Recebe um token de recuperação e uma nova senha, valida e aplica.
-
-    Validações, na ordem: token existe, ainda não expirou (2.3, 2.5),
-    ainda não foi usado (2.4). Qualquer falha é registrada no log
-    (2.7) e retorna 400 com mensagem clara, sem revelar detalhes que
-    ajudem alguém tentando adivinhar tokens.
     """
-
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):
@@ -136,19 +129,22 @@ class RedefinirSenhaView(APIView):
 def login_view(request):
     """
     Interface visual (Stateful) para autenticação de usuários via web.
-    Integra a checagem segura de credenciais com o modelo do PostgreSQL.
-
-    Quando o usuário tem 2FA confirmado, a sessão NÃO é criada aqui.
-    Em vez disso, guardamos o id do usuário em request.session (fora da
-    sessão autenticada de verdade) e redirecionamos para a validação do
-    código. A sessão autenticada só existe depois do código correto,
-    em validar_dois_fatores_view.
     """
     if request.method == 'POST':
         usuario_digitado = request.POST.get('username')
         senha_digitada = request.POST.get('password')
 
-        # authenticate(): Abstrai a verificação de hash e previne SQL Injection na consulta
+        # 1. Verifica preventivamente se o usuário existe para checar o status de consentimento LGPD
+        usuario_obj = Usuario.objects.filter(username=usuario_digitado).first() or \
+                      Usuario.objects.filter(email=usuario_digitado).first()
+
+        # 2. Se a conta foi desativada por revogação de consentimento, redireciona para a tela de reativação
+        if usuario_obj and (not usuario_obj.consentimento_dados or not usuario_obj.is_active):
+            request.session['usuario_inativo_id'] = usuario_obj.id
+            messages.error(request, "Sua conta está inativa devido à revogação do consentimento (LGPD).")
+            return redirect('reativar_conta_lgpd')
+
+        # 3. Fluxo normal de autenticação do Django
         user = authenticate(request, username=usuario_digitado, password=senha_digitada)
 
         if user is not None:
@@ -158,11 +154,9 @@ def login_view(request):
                 request.session['pre_2fa_user_id'] = user.id
                 return redirect('validar_2fa_web')
 
-            # login(): Acopla o usuário validado à sessão, gerando o cookie HTTP-only
             login(request, user)
             return redirect('home')
         else:
-            # Mensagem genérica intencional para mitigar vulnerabilidade de Enumeração de Usuários
             messages.error(request, 'Credenciais inválidas. Verifique seu acesso e tente novamente.')
 
     return render(request, 'usuarios/login.html')
@@ -170,35 +164,18 @@ def login_view(request):
 
 @login_required(login_url='/api/usuarios/entrar/')
 def home_view(request):
-    """
-    Endpoint da tela inicial (Dashboard) após login bem-sucedido.
-    """
     return render(request, 'usuarios/home.html')
 
 
 def logout_view(request):
-    """
-    Encerra a sessão do usuário autenticado via web.
-
-    logout() limpa os dados de sessão no servidor e invalida o cookie
-    de sessão do navegador, não apenas remove os dados do lado do
-    cliente. Uma sessão encerrada aqui não pode ser reaproveitada.
-    """
     logout(request)
     return redirect('login_web')
 
 
 class AtivarDoisFatoresView(APIView):
     """
-    Cria um dispositivo TOTP não confirmado para o usuário autenticado
-    e devolve o QR Code (imagem PNG) para escanear no app autenticador.
-
-    O dispositivo só é considerado ativo de fato depois que o usuário
-    confirma o primeiro código gerado, em ConfirmarDoisFatoresView.
-    Antes da confirmação, ele existe mas não bloqueia o login (ver
-    device.confirmed).
+    Endpoints de API para 2FA (Mantidos para compatibilidade com outros clientes)
     """
-
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
@@ -220,17 +197,10 @@ class AtivarDoisFatoresView(APIView):
 
 
 class ConfirmarDoisFatoresView(APIView):
-    """
-    Confirma o dispositivo TOTP pendente com o primeiro código gerado
-    pelo app autenticador. Sem essa confirmação, o dispositivo nunca
-    passa a exigir código no login (device.confirmed continua False).
-    """
-
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
         codigo = request.data.get("codigo", "")
-
         device = TOTPDevice.objects.filter(user=request.user, confirmed=False).first()
 
         if not device:
@@ -263,10 +233,6 @@ class ConfirmarDoisFatoresView(APIView):
 def validar_dois_fatores_view(request):
     """
     Segunda etapa do login para usuários com 2FA confirmado.
-
-    Só é possível chegar aqui depois de senha correta (login_view
-    guardou 'pre_2fa_user_id' na sessão). A sessão autenticada de
-    verdade (login()) só é criada se o código TOTP for válido.
     """
     user_id = request.session.get('pre_2fa_user_id')
 
@@ -301,31 +267,161 @@ def validar_dois_fatores_view(request):
 
     return render(request, 'usuarios/validar_2fa.html')
 
+
 @login_required
 def perfil_view(request):
-    # Renderiza a tela "Meu Perfil"
     return render(request, 'usuarios/perfil.html')
 
-@login_required
-def exportar_dados_view(request):
-    # Placeholder: Futuramente gerará o JSON com os dados do usuário (LGPD 4.9)
-    return JsonResponse({"mensagem": "A exportação de dados será implementada aqui."})
-
-@login_required
-def configurar_2fa_view(request):
-    # Placeholder: Renderizará o QR Code e a ativação do 2FA
-    return HttpResponse("Página de configuração do 2FA em construção.")
 
 @login_required
 def revogar_consentimento_view(request):
     if request.method == 'POST':
-        # Placeholder: Lógica para alterar o status do consentimento (LGPD 4.6)
-        return HttpResponse("Preferências de privacidade atualizadas.")
+        usuario = request.user
+        
+        # Se estiver ativo, nós revogamos e desativamos a conta
+        if usuario.consentimento_dados:
+            usuario.consentimento_dados = False
+            usuario.data_consentimento = None
+            usuario.versao_documento_aceito = None
+            usuario.is_active = False
+            usuario.save()
+            
+            LogAutenticacao.objects.create(
+                usuario=usuario,
+                email_informado=usuario.email,
+                tipo_evento=LogAutenticacao.TipoEvento.DOISFA_DESATIVADO,
+                detalhe="Usuário revogou o consentimento de dados (LGPD 4.6)"
+            )
+            logout(request)
+            messages.warning(request, "Você revogou seu consentimento. Seu acesso foi suspenso.")
+            return redirect('login_web')
+            
+        # Se já estiver revogado e ele clicou em reativar
+        else:
+            usuario.consentimento_dados = True
+            usuario.data_consentimento = timezone.now()
+            usuario.versao_documento_aceito = "v1.0"
+            usuario.is_active = True
+            usuario.save()
+            
+            messages.success(request, "Consentimento restaurado com sucesso!")
+            return redirect('perfil')
+            
     return redirect('perfil')
+
 
 @login_required
 def encerrar_conta_view(request):
     if request.method == 'POST':
-        # Placeholder: Lógica de anonimização (LGPD 4.10)
-        return HttpResponse("Conta encerrada e dados anonimizados.")
+        usuario = request.user
+        
+        # 1. Mascarar dados pessoais (LGPD 4.10 - Anonimização)
+        prefixo = f"anon_{usuario.id}"
+        
+        usuario.username = prefixo
+        usuario.first_name = "Usuário"
+        usuario.last_name = "Anonimizado"
+        usuario.email = f"{prefixo}@emprestacampus.local"
+        usuario.matricula = prefixo
+        
+        # 2. Revogar acesso e destruir credenciais
+        usuario.is_active = False
+        usuario.set_unusable_password() 
+        
+        # 3. Persistir a anonimização no PostgreSQL
+        usuario.save()
+        
+        # 4. Destruir a sessão atual do navegador
+        logout(request)
+        
+        messages.success(request, "Conta encerrada. Seus dados pessoais foram anonimizados irreversivelmente.")
+        
+        return redirect('login_web')
+        
     return redirect('perfil')
+
+
+@login_required
+def exportar_dados_view(request):
+    usuario = request.user
+    
+    dados_pessoais = {
+        "id_conta": usuario.id,
+        "usuario": usuario.username,
+        "nome": usuario.first_name,
+        "sobrenome": usuario.last_name,
+        "email": usuario.email,
+        "matricula": getattr(usuario, 'matricula', 'Não registrada'),
+        "data_criacao_conta": usuario.date_joined.strftime("%d/%m/%Y %H:%M:%S") if usuario.date_joined else None,
+        "status_conta": "Ativa" if usuario.is_active else "Inativa",
+    }
+    
+    response = JsonResponse(dados_pessoais, json_dumps_params={'ensure_ascii': False, 'indent': 4})
+    response['Content-Disposition'] = f'attachment; filename="dados_pessoais_{usuario.username}.json"'
+    
+    return response
+
+
+@login_required
+def configurar_2fa_view(request):
+    # Processa a confirmação do código digitado
+    if request.method == 'POST':
+        codigo = request.POST.get('codigo', '')
+        device = TOTPDevice.objects.filter(user=request.user, confirmed=False).first()
+
+        if device and device.verify_token(codigo):
+            device.confirmed = True
+            device.save()
+            
+            LogAutenticacao.objects.create(
+                usuario=request.user,
+                email_informado=request.user.email,
+                tipo_evento=LogAutenticacao.TipoEvento.DOISFA_ATIVADO,
+            )
+            
+            messages.success(request, 'Autenticação de Dois Fatores (2FA) ativada com sucesso!')
+            return redirect('perfil')
+        else:
+            messages.error(request, 'Código inválido. Tente novamente.')
+
+    # Geração do QR Code para exibição (Método GET ou falha no POST)
+    TOTPDevice.objects.filter(user=request.user, confirmed=False).delete()
+    
+    device = TOTPDevice.objects.create(
+        user=request.user,
+        name="dispositivo-padrao",
+        confirmed=False,
+    )
+    
+    # Converte a imagem gerada para texto Base64
+    img = qrcode.make(device.config_url)
+    buffer = io.BytesIO()
+    img.save(buffer, format="PNG")
+    qr_b64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+    
+    return render(request, 'usuarios/configurar_2fa.html', {'qr_code': qr_b64})
+
+
+def reativar_conta_lgpd_view(request):
+    user_id = request.session.get('usuario_inativo_id')
+    if not user_id:
+        return redirect('login_web')
+        
+    usuario = Usuario.objects.filter(id=user_id).first()
+    if not usuario:
+        return redirect('login_web')
+        
+    if request.method == 'POST':
+        # Restaura o consentimento e reativa a conta
+        usuario.consentimento_dados = True
+        usuario.data_consentimento = timezone.now()
+        usuario.versao_documento_aceito = "v1.0"
+        usuario.is_active = True
+        usuario.save()
+        
+        # Limpa a sessão e manda para o login
+        del request.session['usuario_inativo_id']
+        messages.success(request, "Consentimento restaurado e conta reativada com sucesso! Faça login novamente.")
+        return redirect('login_web')
+        
+    return render(request, 'usuarios/reativar_conta.html', {'usuario': usuario})

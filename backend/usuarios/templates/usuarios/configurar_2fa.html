@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configurar 2FA - EmprestaCampus</title>
+</head>
+<body style="font-family: sans-serif; max-width: 600px; margin: 40px auto; line-height: 1.6;">
+
+    <h2>Configurar Autenticação de Dois Fatores (2FA)</h2>
+    
+    {% if messages %}
+        <div style="background-color: #fee2e2; color: #991b1b; padding: 10px; border-radius: 5px; margin-bottom: 20px;">
+            {% for message in messages %}
+                {{ message }}
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    <div style="background-color: #f3f4f6; padding: 20px; border-radius: 8px; text-align: center; margin-bottom: 20px;">
+        <p><strong>1. Escaneie o QR Code abaixo:</strong></p>
+        <img src="data:image/png;base64,{{ qr_code }}" alt="QR Code 2FA" style="max-width: 250px; border: 10px solid white; border-radius: 8px;">
+    </div>
+
+    <form method="POST" style="border: 1px solid #e5e7eb; padding: 20px; border-radius: 8px;">
+        {% csrf_token %}
+        <p><strong>2. Digite o código de 6 dígitos gerado para confirmar:</strong></p>
+        <div style="display: flex; gap: 10px; align-items: center;">
+            <input type="text" name="codigo" required placeholder="000000" maxlength="6" 
+                   style="padding: 10px; font-size: 18px; width: 120px; text-align: center; letter-spacing: 2px;">
+            <button type="submit" style="padding: 11px 20px; font-size: 16px; background-color: #2563eb; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                Ativar Segurança
+            </button>
+        </div>
+    </form>
+
+    <!-- Botão de Voltar ao Perfil -->
+    <div style="margin-top: 20px; text-align: left;">
+        <a href="{% url 'perfil' %}" style="color: #4b5563; text-decoration: none; font-size: 14px;">
+            &larr; Voltar ao Meu Perfil
+        </a>
+    </div>
+
+</body>
+</html>
