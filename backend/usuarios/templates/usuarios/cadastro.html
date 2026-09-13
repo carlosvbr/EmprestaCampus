@@ -16,6 +16,8 @@
         .btn-login { width: 100%; padding: 10px; background-color: #2563eb; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; font-weight: bold; }
         .btn-login:hover { background-color: #1d4ed8; }
         #mensagem { text-align: center; margin-top: 15px; font-weight: bold; font-size: 14px; }
+        .link-privacidade { color: #2563eb; text-decoration: underline; }
+        .link-privacidade:hover { color: #1d4ed8; }
     </style>
 </head>
 <body>
@@ -68,10 +70,12 @@
             <input type="password" id="password" required minlength="8" placeholder="Mínimo de 8 caracteres">
         </div>
 
+        <!-- Bloco atualizado com o link da Política de Privacidade -->
         <div class="checkbox-group">
             <input type="checkbox" id="consentimento" required>
             <label for="consentimento">
-                Declaro que li e concordo com a coleta e tratamento dos meus dados pessoais, conforme a Política de Privacidade (LGPD).
+                Declaro que li e concordo com a coleta e tratamento dos meus dados pessoais, conforme a 
+                <a href="{% url 'politica_privacidade' %}" target="_blank" class="link-privacidade">Política de Privacidade (LGPD)</a>.
             </label>
         </div>
         

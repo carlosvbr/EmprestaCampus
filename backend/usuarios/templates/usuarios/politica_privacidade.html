@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Política de Privacidade - EmprestaCampus</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+
+    <header class="bg-blue-600 text-white p-4 flex justify-between items-center shadow">
+        <h1 class="text-xl font-bold">EmprestaCampus</h1>
+        <nav>
+            <a href="#" onclick="voltarOuFechar(); return false;" class="mr-4 hover:underline">Voltar / Fechar</a>
+        </nav>
+    </header>
+
+    <main class="container mx-auto p-8 max-w-4xl bg-white mt-8 rounded-lg shadow border border-gray-200">
+        <h2 class="text-2xl font-bold mb-6 text-gray-800 border-b pb-2">Política de Privacidade e Transparência de Dados</h2>
+        
+        <p class="mb-6 text-gray-700">Esta política descreve como o sistema <strong>EmprestaCampus</strong> realiza o tratamento dos seus dados pessoais, em estrita conformidade com a Lei Geral de Proteção de Dados (LGPD - Lei nº 13.709/2018).</p>
+
+        <h3 class="text-lg font-semibold text-blue-700 mt-6 mb-2">1. Dados Pessoais Coletados e Finalidade</h3>
+        <ul class="list-disc pl-6 text-gray-700 space-y-2 mb-6">
+            <li><strong>Nome e Sobrenome:</strong> Utilizados para a identificação do titular nas reservas e retiradas de equipamentos.</li>
+            <li><strong>E-mail Institucional:</strong> Utilizado para comunicações oficiais, alertas de segurança e recuperação de senha.</li>
+            <li><strong>Matrícula (RA/SIAPE):</strong> Utilizada para vincular o titular à instituição e garantir a responsabilidade patrimonial sobre os itens emprestados.</li>
+            <li><strong>Vínculo (Aluno, Docente, Técnico):</strong> Utilizado para aplicar regras de acesso (RBAC) e definir permissões de tempo de empréstimo.</li>
+            <li><strong>Logs de Acesso e IP:</strong> Coletados automaticamente para auditoria de segurança, prevenção a fraudes e rastreabilidade de ações no sistema.</li>
+        </ul>
+
+        <h3 class="text-lg font-semibold text-blue-700 mt-6 mb-2">2. Princípio da Minimização de Dados</h3>
+        <p class="text-gray-700 mb-6">
+            O EmprestaCampus adota estritamente o princípio da minimização (Art. 6º, III da LGPD). O sistema coleta e trata apenas os dados adequados, pertinentes e limitados ao mínimo necessário para a realização da gestão de empréstimos. Não coletamos dados sensíveis (como etnia, religião ou dados de saúde), CPF, endereço residencial ou informações financeiras.
+        </p>
+
+        <h3 class="text-lg font-semibold text-blue-700 mt-6 mb-2">3. Fluxo de Atendimento aos Direitos do Titular</h3>
+        <p class="text-gray-700 mb-2">
+            Os titulares podem exercer seus direitos de forma automatizada:
+        </p>
+        <ul class="list-disc pl-6 text-gray-700 space-y-2 mb-6">
+            <li><strong>Autoatendimento:</strong> Através da aba "Meu Perfil", o usuário pode consultar ativamente seus dados (Art. 18, II), exportar um relatório estruturado JSON (Art. 18, V), revogar o consentimento (Art. 18, IX) e solicitar o encerramento da conta com anonimização irreversível dos dados (Art. 18, IV e VI).</li>
+        </ul>
+        
+        <div class="mt-8 pt-4 border-t border-gray-200 text-sm text-gray-500">
+            Última atualização: Setembro de 2026 | Versão do Documento: v1.0
+        </div>
+    </main>
+
+    <script>
+        function voltarOuFechar() {
+            // Se houver histórico na aba, ele volta. Se não houver (aba nova), ele fecha a aba.
+            if (window.history.length > 1 && document.referrer !== "") {
+                window.history.back();
+            } else {
+                window.close();
+                // Fallback caso o navegador bloqueie o fechamento: redireciona para o login
+                window.location.href = "/api/usuarios/entrar/";
+            }
+        }
+    </script>
+</body>
+</html>

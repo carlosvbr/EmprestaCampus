@@ -39,4 +39,5 @@ urlpatterns = [
     path('perfil/revogar-consentimento/', views.revogar_consentimento_view, name='revogar_consentimento'),
     path('perfil/encerrar-conta/', views.encerrar_conta_view, name='encerrar_conta'),
     path('reativar-conta/', views.reativar_conta_lgpd_view, name='reativar_conta_lgpd'),
+    path('privacidade/', TemplateView.as_view(template_name='usuarios/politica_privacidade.html'), name='politica_privacidade'),
 ]

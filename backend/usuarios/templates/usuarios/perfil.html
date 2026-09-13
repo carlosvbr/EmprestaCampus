@@ -50,7 +50,12 @@
                 <hr class="my-4 border-gray-200">
 
                 <div>
-                    <p class="font-medium text-gray-800 mb-2">Termos de Privacidade (LGPD)</p>
+                    <p class="font-medium text-gray-800 mb-1">Termos de Privacidade (LGPD)</p>
+                    
+                    <a href="{% url 'politica_privacidade' %}" target="_blank" class="text-sm text-blue-600 hover:underline mb-3 inline-block">
+                        Ler a Política de Privacidade e Transparência
+                    </a>
+
                     <p class="text-xs text-gray-600 mb-3">
                         Status do Consentimento: 
                         {% if request.user.consentimento_dados %}
