@@ -16,17 +16,22 @@ from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import LogAutenticacao, TokenRecuperacaoSenha, Usuario
+# Importação alterada para usar o módulo central de auditoria e remover LogAutenticacao
+from auditoria.models import RegistroAuditoria
+from .models import TokenRecuperacaoSenha, Usuario
 from .serializers import RegistroSerializer
+
+# Função auxiliar para capturar o IP real
+def get_client_ip(request):
+    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+    if x_forwarded_for:
+        return x_forwarded_for.split(',')[0]
+    return request.META.get('REMOTE_ADDR')
 
 
 class RegistroView(generics.CreateAPIView):
     """
     Endpoint público de cadastro de usuário via API REST.
-    Não exige autenticação (AllowAny), pois atua como porta de entrada.
-    A senha é recebida em texto plano, mas o RegistroSerializer delega
-    a criptografia ao set_password(), aplicando hash (PBKDF2) antes da
-    persistência no banco PostgreSQL.
     """
     serializer_class = RegistroSerializer
     permission_classes = [permissions.AllowAny]
@@ -34,30 +39,29 @@ class RegistroView(generics.CreateAPIView):
 
 class SolicitarRecuperacaoSenhaView(APIView):
     """
-    Recebe um e-mail e, se existir um usuário com ele, gera um token de
-    recuperação e "envia" por e-mail (console, em desenvolvimento).
-    Sempre responde 200, mesmo se o e-mail não existir no sistema.
+    Recebe um e-mail e gera um token de recuperação.
     """
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):
         email = request.data.get("email", "")
         usuario = Usuario.objects.filter(email=email).first()
+        ip = get_client_ip(request)
 
-        LogAutenticacao.objects.create(
+        RegistroAuditoria.objects.create(
             usuario=usuario,
-            email_informado=email,
-            tipo_evento=LogAutenticacao.TipoEvento.SOLICITACAO_RECUPERACAO,
+            acao='RECUPERACAO',
+            modulo_afetado='Autenticação/Recuperação',
+            descricao=f'Solicitação de recuperação de senha. E-mail informado: {email}',
+            ip_origem=ip
         )
 
         if usuario:
             token = TokenRecuperacaoSenha.objects.create(usuario=usuario)
             
-            # 1. Gera a rota de forma limpa, baseada no urls.py
             caminho_base = reverse('redefinir_senha_web').lstrip('/')
             link = request.build_absolute_uri(f"/{caminho_base}?token={token.token}")
             
-            # 2. Imprime o link limpo direto no terminal (Fura o bloqueio do EmailBackend)
             print("\n" + "="*70)
             print("LINK DE RECUPERAÇÃO (LIMPO PARA ACESSO DIRETO):")
             print(link)
@@ -71,40 +75,45 @@ class SolicitarRecuperacaoSenhaView(APIView):
 
 class RedefinirSenhaView(APIView):
     """
-    Recebe um token de recuperação e uma nova senha, valida e aplica.
+    Recebe um token de recuperação e uma nova senha.
     """
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):
         token_str = request.data.get("token", "")
         nova_senha = request.data.get("password", "")
+        ip = get_client_ip(request)
 
         token = TokenRecuperacaoSenha.objects.filter(token=token_str).first()
 
         if not token:
-            LogAutenticacao.objects.create(
-                email_informado="",
-                tipo_evento=LogAutenticacao.TipoEvento.RECUPERACAO_FALHA,
-                detalhe="Token inexistente",
+            RegistroAuditoria.objects.create(
+                usuario=None,
+                acao='UPDATE',
+                modulo_afetado='Autenticação/Recuperação',
+                descricao='Falha na recuperação: Token inexistente.',
+                ip_origem=ip
             )
             return Response({"detail": "Token inválido."}, status=status.HTTP_400_BAD_REQUEST)
 
         if not token.esta_valido():
             motivo = "Token já utilizado" if token.usado else "Token expirado"
-            LogAutenticacao.objects.create(
+            RegistroAuditoria.objects.create(
                 usuario=token.usuario,
-                email_informado=token.usuario.email,
-                tipo_evento=LogAutenticacao.TipoEvento.RECUPERACAO_FALHA,
-                detalhe=motivo,
+                acao='UPDATE',
+                modulo_afetado='Autenticação/Recuperação',
+                descricao=f'Falha na recuperação: {motivo}.',
+                ip_origem=ip
             )
             return Response({"detail": motivo + "."}, status=status.HTTP_400_BAD_REQUEST)
 
         if len(nova_senha) < 8:
-            LogAutenticacao.objects.create(
+            RegistroAuditoria.objects.create(
                 usuario=token.usuario,
-                email_informado=token.usuario.email,
-                tipo_evento=LogAutenticacao.TipoEvento.RECUPERACAO_FALHA,
-                detalhe="Senha nova com menos de 8 caracteres",
+                acao='UPDATE',
+                modulo_afetado='Autenticação/Recuperação',
+                descricao='Falha na recuperação: Senha nova com menos de 8 caracteres.',
+                ip_origem=ip
             )
             return Response(
                 {"detail": "A senha precisa ter ao menos 8 caracteres."},
@@ -117,10 +126,12 @@ class RedefinirSenhaView(APIView):
         token.usado = True
         token.save()
 
-        LogAutenticacao.objects.create(
+        RegistroAuditoria.objects.create(
             usuario=token.usuario,
-            email_informado=token.usuario.email,
-            tipo_evento=LogAutenticacao.TipoEvento.RECUPERACAO_SUCESSO,
+            acao='RECUPERACAO',
+            modulo_afetado='Autenticação/Recuperação',
+            descricao='Senha redefinida com sucesso.',
+            ip_origem=ip
         )
 
         return Response({"detail": "Senha redefinida com sucesso."}, status=status.HTTP_200_OK)
@@ -133,18 +144,16 @@ def login_view(request):
     if request.method == 'POST':
         usuario_digitado = request.POST.get('username')
         senha_digitada = request.POST.get('password')
+        ip = get_client_ip(request)
 
-        # 1. Verifica preventivamente se o usuário existe para checar o status de consentimento LGPD
         usuario_obj = Usuario.objects.filter(username=usuario_digitado).first() or \
                       Usuario.objects.filter(email=usuario_digitado).first()
 
-        # 2. Se a conta foi desativada por revogação de consentimento, redireciona para a tela de reativação
         if usuario_obj and (not usuario_obj.consentimento_dados or not usuario_obj.is_active):
             request.session['usuario_inativo_id'] = usuario_obj.id
             messages.error(request, "Sua conta está inativa devido à revogação do consentimento (LGPD).")
             return redirect('reativar_conta_lgpd')
 
-                # 3. Fluxo normal de autenticação do Django
         user = authenticate(request, username=usuario_digitado, password=senha_digitada)
 
         if user is not None:
@@ -154,19 +163,22 @@ def login_view(request):
                 request.session['pre_2fa_user_id'] = user.id
                 return redirect('validar_2fa_web')
 
-            LogAutenticacao.objects.create(
+            RegistroAuditoria.objects.create(
                 usuario=user,
-                email_informado=user.email,
-                tipo_evento=LogAutenticacao.TipoEvento.LOGIN_SUCESSO,
+                acao='LOGIN_SUCESSO',
+                modulo_afetado='Autenticação',
+                descricao='Autenticação primária concluída com sucesso (sem 2FA).',
+                ip_origem=ip
             )
             login(request, user)
             return redirect('home')
         else:
-            LogAutenticacao.objects.create(
+            RegistroAuditoria.objects.create(
                 usuario=usuario_obj,
-                email_informado=usuario_digitado or "",
-                tipo_evento=LogAutenticacao.TipoEvento.LOGIN_FALHA,
-                detalhe="Credenciais inválidas",
+                acao='LOGIN_FALHA',
+                modulo_afetado='Autenticação',
+                descricao=f'Credenciais inválidas. Login tentado: {usuario_digitado}',
+                ip_origem=ip
             )
             messages.error(request, 'Credenciais inválidas. Verifique seu acesso e tente novamente.')
 
@@ -183,9 +195,6 @@ def logout_view(request):
 
 
 class AtivarDoisFatoresView(APIView):
-    """
-    Endpoints de API para 2FA (Mantidos para compatibilidade com outros clientes)
-    """
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
@@ -212,6 +221,7 @@ class ConfirmarDoisFatoresView(APIView):
     def post(self, request):
         codigo = request.data.get("codigo", "")
         device = TOTPDevice.objects.filter(user=request.user, confirmed=False).first()
+        ip = get_client_ip(request)
 
         if not device:
             return Response(
@@ -220,31 +230,32 @@ class ConfirmarDoisFatoresView(APIView):
             )
 
         if not device.verify_token(codigo):
-            LogAutenticacao.objects.create(
+            RegistroAuditoria.objects.create(
                 usuario=request.user,
-                email_informado=request.user.email,
-                tipo_evento=LogAutenticacao.TipoEvento.DOISFA_FALHA,
-                detalhe="Código inválido na confirmação da ativação",
+                acao='UPDATE',
+                modulo_afetado='Segurança/2FA',
+                descricao='Falha: Código inválido na confirmação da ativação do 2FA.',
+                ip_origem=ip
             )
             return Response({"detail": "Código inválido."}, status=status.HTTP_400_BAD_REQUEST)
 
         device.confirmed = True
         device.save()
 
-        LogAutenticacao.objects.create(
+        RegistroAuditoria.objects.create(
             usuario=request.user,
-            email_informado=request.user.email,
-            tipo_evento=LogAutenticacao.TipoEvento.DOISFA_ATIVADO,
+            acao='UPDATE',
+            modulo_afetado='Segurança/2FA',
+            descricao='2FA ativado com sucesso via API.',
+            ip_origem=ip
         )
 
         return Response({"detail": "2FA ativado com sucesso."}, status=status.HTTP_200_OK)
 
 
 def validar_dois_fatores_view(request):
-    """
-    Segunda etapa do login para usuários com 2FA confirmado.
-    """
     user_id = request.session.get('pre_2fa_user_id')
+    ip = get_client_ip(request)
 
     if not user_id:
         return redirect('login_web')
@@ -259,19 +270,22 @@ def validar_dois_fatores_view(request):
             del request.session['pre_2fa_user_id']
             login(request, usuario, backend='django.contrib.auth.backends.ModelBackend')
 
-            LogAutenticacao.objects.create(
+            RegistroAuditoria.objects.create(
                 usuario=usuario,
-                email_informado=usuario.email,
-                tipo_evento=LogAutenticacao.TipoEvento.DOISFA_SUCESSO,
+                acao='2FA_SUCESSO',
+                modulo_afetado='Autenticação',
+                descricao='Autenticação 2FA concluída com sucesso.',
+                ip_origem=ip
             )
 
             return redirect('home')
 
-        LogAutenticacao.objects.create(
+        RegistroAuditoria.objects.create(
             usuario=usuario,
-            email_informado=usuario.email,
-            tipo_evento=LogAutenticacao.TipoEvento.DOISFA_FALHA,
-            detalhe="Código incorreto no login",
+            acao='2FA_FALHA',
+            modulo_afetado='Autenticação',
+            descricao='Falha no 2FA: Código incorreto no login.',
+            ip_origem=ip
         )
         messages.error(request, 'Código incorreto.')
 
@@ -287,8 +301,8 @@ def perfil_view(request):
 def revogar_consentimento_view(request):
     if request.method == 'POST':
         usuario = request.user
+        ip = get_client_ip(request)
         
-        # Se estiver ativo, nós revogamos e desativamos a conta
         if usuario.consentimento_dados:
             usuario.consentimento_dados = False
             usuario.data_consentimento = None
@@ -296,17 +310,17 @@ def revogar_consentimento_view(request):
             usuario.is_active = False
             usuario.save()
             
-            LogAutenticacao.objects.create(
+            RegistroAuditoria.objects.create(
                 usuario=usuario,
-                email_informado=usuario.email,
-                tipo_evento=LogAutenticacao.TipoEvento.DOISFA_DESATIVADO,
-                detalhe="Usuário revogou o consentimento de dados (LGPD 4.6)"
+                acao='UPDATE',
+                modulo_afetado='Privacidade/LGPD',
+                descricao='Usuário revogou o consentimento de dados (LGPD 4.6) e teve acesso suspenso.',
+                ip_origem=ip
             )
             logout(request)
             messages.warning(request, "Você revogou seu consentimento. Seu acesso foi suspenso.")
             return redirect('login_web')
             
-        # Se já estiver revogado e ele clicou em reativar
         else:
             usuario.consentimento_dados = True
             usuario.data_consentimento = timezone.now()
@@ -314,6 +328,13 @@ def revogar_consentimento_view(request):
             usuario.is_active = True
             usuario.save()
             
+            RegistroAuditoria.objects.create(
+                usuario=usuario,
+                acao='UPDATE',
+                modulo_afetado='Privacidade/LGPD',
+                descricao='Usuário restaurou o consentimento de dados.',
+                ip_origem=ip
+            )
             messages.success(request, "Consentimento restaurado com sucesso!")
             return redirect('perfil')
             
@@ -324,9 +345,17 @@ def revogar_consentimento_view(request):
 def encerrar_conta_view(request):
     if request.method == 'POST':
         usuario = request.user
+        ip = get_client_ip(request)
         
-        # 1. Mascarar dados pessoais (LGPD 4.10 - Anonimização)
         prefixo = f"anon_{usuario.id}"
+        
+        RegistroAuditoria.objects.create(
+            usuario=usuario,
+            acao='DELETE',
+            modulo_afetado='Privacidade/LGPD',
+            descricao='Usuário solicitou encerramento de conta. Dados pessoais anonimizados.',
+            ip_origem=ip
+        )
         
         usuario.username = prefixo
         usuario.first_name = "Usuário"
@@ -334,18 +363,12 @@ def encerrar_conta_view(request):
         usuario.email = f"{prefixo}@emprestacampus.local"
         usuario.matricula = prefixo
         
-        # 2. Revogar acesso e destruir credenciais
         usuario.is_active = False
         usuario.set_unusable_password() 
-        
-        # 3. Persistir a anonimização no PostgreSQL
         usuario.save()
-        
-        # 4. Destruir a sessão atual do navegador
         logout(request)
         
         messages.success(request, "Conta encerrada. Seus dados pessoais foram anonimizados irreversivelmente.")
-        
         return redirect('login_web')
         
     return redirect('perfil')
@@ -374,19 +397,21 @@ def exportar_dados_view(request):
 
 @login_required
 def configurar_2fa_view(request):
-    # Processa a confirmação do código digitado
     if request.method == 'POST':
         codigo = request.POST.get('codigo', '')
         device = TOTPDevice.objects.filter(user=request.user, confirmed=False).first()
+        ip = get_client_ip(request)
 
         if device and device.verify_token(codigo):
             device.confirmed = True
             device.save()
             
-            LogAutenticacao.objects.create(
+            RegistroAuditoria.objects.create(
                 usuario=request.user,
-                email_informado=request.user.email,
-                tipo_evento=LogAutenticacao.TipoEvento.DOISFA_ATIVADO,
+                acao='UPDATE',
+                modulo_afetado='Segurança/2FA',
+                descricao='Autenticação de Dois Fatores (2FA) ativada com sucesso.',
+                ip_origem=ip
             )
             
             messages.success(request, 'Autenticação de Dois Fatores (2FA) ativada com sucesso!')
@@ -394,7 +419,6 @@ def configurar_2fa_view(request):
         else:
             messages.error(request, 'Código inválido. Tente novamente.')
 
-    # Geração do QR Code para exibição (Método GET ou falha no POST)
     TOTPDevice.objects.filter(user=request.user, confirmed=False).delete()
     
     device = TOTPDevice.objects.create(
@@ -403,7 +427,6 @@ def configurar_2fa_view(request):
         confirmed=False,
     )
     
-    # Converte a imagem gerada para texto Base64
     img = qrcode.make(device.config_url)
     buffer = io.BytesIO()
     img.save(buffer, format="PNG")
@@ -414,6 +437,8 @@ def configurar_2fa_view(request):
 
 def reativar_conta_lgpd_view(request):
     user_id = request.session.get('usuario_inativo_id')
+    ip = get_client_ip(request)
+
     if not user_id:
         return redirect('login_web')
         
@@ -422,14 +447,20 @@ def reativar_conta_lgpd_view(request):
         return redirect('login_web')
         
     if request.method == 'POST':
-        # Restaura o consentimento e reativa a conta
         usuario.consentimento_dados = True
         usuario.data_consentimento = timezone.now()
         usuario.versao_documento_aceito = "v1.0"
         usuario.is_active = True
         usuario.save()
         
-        # Limpa a sessão e manda para o login
+        RegistroAuditoria.objects.create(
+            usuario=usuario,
+            acao='UPDATE',
+            modulo_afetado='Privacidade/LGPD',
+            descricao='Conta reativada e consentimento restaurado.',
+            ip_origem=ip
+        )
+        
         del request.session['usuario_inativo_id']
         messages.success(request, "Consentimento restaurado e conta reativada com sucesso! Faça login novamente.")
         return redirect('login_web')
