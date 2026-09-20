@@ -114,6 +114,8 @@ class LogAutenticacao(models.Model):
     """
 
     class TipoEvento(models.TextChoices):
+        LOGIN_SUCESSO = "LOGIN_SUCESSO", "Login bem-sucedido"
+        LOGIN_FALHA = "LOGIN_FALHA", "Login falhou"
         SOLICITACAO_RECUPERACAO = "SOLICITACAO_RECUPERACAO", "Solicitação de recuperação"
         RECUPERACAO_SUCESSO = "RECUPERACAO_SUCESSO", "Recuperação concluída"
         RECUPERACAO_FALHA = "RECUPERACAO_FALHA", "Recuperação falhou"

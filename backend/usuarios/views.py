@@ -144,7 +144,7 @@ def login_view(request):
             messages.error(request, "Sua conta está inativa devido à revogação do consentimento (LGPD).")
             return redirect('reativar_conta_lgpd')
 
-        # 3. Fluxo normal de autenticação do Django
+                # 3. Fluxo normal de autenticação do Django
         user = authenticate(request, username=usuario_digitado, password=senha_digitada)
 
         if user is not None:
@@ -154,13 +154,23 @@ def login_view(request):
                 request.session['pre_2fa_user_id'] = user.id
                 return redirect('validar_2fa_web')
 
+            LogAutenticacao.objects.create(
+                usuario=user,
+                email_informado=user.email,
+                tipo_evento=LogAutenticacao.TipoEvento.LOGIN_SUCESSO,
+            )
             login(request, user)
             return redirect('home')
         else:
+            LogAutenticacao.objects.create(
+                usuario=usuario_obj,
+                email_informado=usuario_digitado or "",
+                tipo_evento=LogAutenticacao.TipoEvento.LOGIN_FALHA,
+                detalhe="Credenciais inválidas",
+            )
             messages.error(request, 'Credenciais inválidas. Verifique seu acesso e tente novamente.')
 
     return render(request, 'usuarios/login.html')
-
 
 @login_required(login_url='/api/usuarios/entrar/')
 def home_view(request):
