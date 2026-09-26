@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Catálogo - EmprestaCampus</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; background-color: #f3f4f6; color: #333; }
+        .navbar { background-color: #2563eb; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; color: white; }
+        .navbar h1 { margin: 0; font-size: 20px; }
+        .navbar-links a { color: white; text-decoration: none; margin-left: 20px; font-weight: bold; font-size: 14px; }
+        .navbar-links a:hover { text-decoration: underline; }
+        .container { max-width: 1000px; margin: 40px auto; padding: 20px; }
+        table { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        th, td { padding: 12px 16px; text-align: left; border-bottom: 1px solid #e5e7eb; }
+        th { background-color: #2563eb; color: white; }
+        .status-DISPONIVEL { color: #16a34a; font-weight: bold; }
+        .status-EMPRESTADO { color: #d97706; font-weight: bold; }
+        .status-MANUTENCAO { color: #dc2626; font-weight: bold; }
+        .status-INATIVO { color: #6b7280; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <nav class="navbar">
+        <h1>EmprestaCampus</h1>
+        <div class="navbar-links">
+            <a href="{% url 'catalogo_web' %}">Equipamentos</a>
+            <a href="#">Meus Empréstimos</a>
+            <a href="{% url 'perfil' %}">Meu Perfil</a>
+            <a href="{% url 'logout_web' %}">Sair</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <h2>Catálogo de Equipamentos</h2>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Nome</th>
+                    <th>Categoria</th>
+                    <th>Patrimônio</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for equipamento in equipamentos %}
+                <tr>
+                    <td>{{ equipamento.nome }}</td>
+                    <td>{{ equipamento.categoria.nome }}</td>
+                    <td>{{ equipamento.patrimonio }}</td>
+                    <td class="status-{{ equipamento.status }}">{{ equipamento.get_status_display }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="4">Nenhum equipamento cadastrado ainda.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+</body>
+</html>

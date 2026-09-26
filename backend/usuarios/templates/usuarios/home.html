@@ -24,7 +24,7 @@
     <nav class="navbar">
         <h1>EmprestaCampus</h1>
         <div class="navbar-links">
-            <a href="#">Equipamentos</a>
+            <a href="{% url 'catalogo_web' %}">Equipamentos</a>
             <a href="#">Meus Empréstimos</a>
             <a href="{% url 'perfil' %}">Meu Perfil</a>
             <a href="{% url 'logout_web' %}">Sair</a>
@@ -42,7 +42,7 @@
             <div class="card">
                 <h3>Solicitar Equipamento</h3>
                 <p>Navegue pelo catálogo e reserve o que você precisa para suas aulas ou projetos.</p>
-                <a href="#" class="btn-action">Ver Catálogo</a>
+                <a href="{% url 'catalogo_web' %}" class="btn-action">Ver Catálogo</a>
             </div>
             
             <div class="card">
