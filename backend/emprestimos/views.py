@@ -5,6 +5,7 @@ from rest_framework import generics, permissions
 
 from auditoria.models import RegistroAuditoria
 from inventario.models import Equipamento
+from notificacoes.utils import notificar_admins
 from .models import Emprestimo
 from .serializers import EmprestimoSerializer, SolicitarEmprestimoSerializer
 
@@ -33,6 +34,12 @@ class SolicitarEmprestimoView(generics.CreateAPIView):
             modulo_afetado='Empréstimos',
             descricao=f'Solicitação criada para o equipamento {emprestimo.equipamento.nome}.',
             ip_origem=get_client_ip(self.request),
+        )
+
+        # Avisa o admin que existe uma solicitação nova pendente de análise
+        notificar_admins(
+            f'Nova solicitação de empréstimo: {emprestimo.equipamento.nome} '
+            f'por {emprestimo.usuario.username}.'
         )
 
 
@@ -98,6 +105,11 @@ def solicitar_emprestimo_view(request, equipamento_id):
         ip_origem=get_client_ip(request),
     )
 
+    # Avisa o admin por e-mail que existe uma nova solicitação esperando aprovação.
+    notificar_admins(
+        f'Nova solicitação de empréstimo: {equipamento.nome} por {request.user.username}.'
+    )
+
     messages.success(
         request,
         'Sua solicitação foi enviada.'
@@ -153,6 +165,11 @@ def solicitar_prorrogacao_view(request, emprestimo_id):
             f'{emprestimo.equipamento.nome}.'
         ),
         ip_origem=get_client_ip(request),
+    )
+
+    # Avisa onadmin que existe um pedido de prorrogação esperando aprovação.
+    notificar_admins(
+        f'Pedido de prorrogação: {emprestimo.equipamento.nome} por {request.user.username}.'
     )
 
     messages.success(

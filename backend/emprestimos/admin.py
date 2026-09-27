@@ -4,6 +4,7 @@ from django.conf import settings
 from django.utils import timezone
 
 from auditoria.models import RegistroAuditoria
+from notificacoes.utils import notificar
 from .models import Emprestimo
 
 
@@ -55,6 +56,15 @@ class EmprestimoAdmin(admin.ModelAdmin):
                 modulo_afetado='Empréstimos',
                 descricao=f'Empréstimo aprovado: {emprestimo.equipamento.nome} para {emprestimo.usuario.username}. Devolução prevista: {emprestimo.data_devolucao_prevista:%d/%m/%Y}.',
             )
+
+            # NOVO: avisa o aluno por e-mail que o pedido foi aprovado,
+            # já informando a data de devolução.
+            notificar(
+                emprestimo.usuario,
+                f'Seu empréstimo de "{emprestimo.equipamento.nome}" foi aprovado. '
+                f'Devolução prevista: {emprestimo.data_devolucao_prevista:%d/%m/%Y}.',
+            )
+
             aprovados += 1
 
         self.message_user(request, f'{aprovados} empréstimo(s) aprovado(s).')
@@ -72,6 +82,12 @@ class EmprestimoAdmin(admin.ModelAdmin):
                 acao='UPDATE',
                 modulo_afetado='Empréstimos',
                 descricao=f'Empréstimo rejeitado: {emprestimo.equipamento.nome} para {emprestimo.usuario.username}.',
+            )
+
+            notificar(
+                emprestimo.usuario,
+                f'Seu pedido de empréstimo de "{emprestimo.equipamento.nome}" foi rejeitado. '
+                f'Você pode solicitar novamente pelo catálogo.',
             )
 
         self.message_user(request, f'{len(pendentes)} empréstimo(s) rejeitado(s).')
@@ -96,6 +112,11 @@ class EmprestimoAdmin(admin.ModelAdmin):
                 descricao=f'Devolução registrada: {emprestimo.equipamento.nome} de {emprestimo.usuario.username}.',
             )
 
+            notificar(
+                emprestimo.usuario,
+                f'A devolução de "{emprestimo.equipamento.nome}" foi registrada com sucesso. Obrigado!',
+            )
+
         self.message_user(request, f'{len(aprovados)} devolução(ões) registrada(s).')
 
     @admin.action(description='Aprovar prorrogação (estende o prazo)')
@@ -117,6 +138,12 @@ class EmprestimoAdmin(admin.ModelAdmin):
                 descricao=f'Prorrogação aprovada: {emprestimo.equipamento.nome} para {emprestimo.usuario.username}. Nova devolução prevista: {emprestimo.data_devolucao_prevista:%d/%m/%Y}.',
             )
 
+            notificar(
+                emprestimo.usuario,
+                f'Sua prorrogação de "{emprestimo.equipamento.nome}" foi aprovada. '
+                f'Nova data de devolução: {emprestimo.data_devolucao_prevista:%d/%m/%Y}.',
+            )
+
         self.message_user(request, f'{len(pendentes)} prorrogação(ões) aprovada(s).')
 
     @admin.action(description='Rejeitar prorrogação')
@@ -132,6 +159,12 @@ class EmprestimoAdmin(admin.ModelAdmin):
                 acao='UPDATE',
                 modulo_afetado='Empréstimos',
                 descricao=f'Prorrogação rejeitada: {emprestimo.equipamento.nome} para {emprestimo.usuario.username}.',
+            )
+
+            notificar(
+                emprestimo.usuario,
+                f'Seu pedido de prorrogação de "{emprestimo.equipamento.nome}" foi rejeitado. '
+                f'A devolução continua prevista para {emprestimo.data_devolucao_prevista:%d/%m/%Y}.',
             )
 
         self.message_user(request, f'{len(pendentes)} pedido(s) de prorrogação rejeitado(s).')
