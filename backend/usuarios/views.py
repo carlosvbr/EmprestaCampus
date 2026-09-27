@@ -6,6 +6,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
+from django.core import signing
 from django.core.mail import send_mail
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
@@ -15,6 +16,7 @@ from django_otp.plugins.otp_totp.models import TOTPDevice
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework_simplejwt.tokens import RefreshToken
 
 # Importação alterada para usar o módulo central de auditoria e remover LogAutenticacao
 from auditoria.models import RegistroAuditoria
@@ -58,10 +60,10 @@ class SolicitarRecuperacaoSenhaView(APIView):
 
         if usuario:
             token = TokenRecuperacaoSenha.objects.create(usuario=usuario)
-            
+
             caminho_base = reverse('redefinir_senha_web').lstrip('/')
             link = request.build_absolute_uri(f"/{caminho_base}?token={token.token}")
-            
+
             print("\n" + "="*70)
             print("LINK DE RECUPERAÇÃO (LIMPO PARA ACESSO DIRETO):")
             print(link)
@@ -302,14 +304,14 @@ def revogar_consentimento_view(request):
     if request.method == 'POST':
         usuario = request.user
         ip = get_client_ip(request)
-        
+
         if usuario.consentimento_dados:
             usuario.consentimento_dados = False
             usuario.data_consentimento = None
             usuario.versao_documento_aceito = None
             usuario.is_active = False
             usuario.save()
-            
+
             RegistroAuditoria.objects.create(
                 usuario=usuario,
                 acao='UPDATE',
@@ -320,14 +322,14 @@ def revogar_consentimento_view(request):
             logout(request)
             messages.warning(request, "Você revogou seu consentimento. Seu acesso foi suspenso.")
             return redirect('login_web')
-            
+
         else:
             usuario.consentimento_dados = True
             usuario.data_consentimento = timezone.now()
             usuario.versao_documento_aceito = "v1.0"
             usuario.is_active = True
             usuario.save()
-            
+
             RegistroAuditoria.objects.create(
                 usuario=usuario,
                 acao='UPDATE',
@@ -337,7 +339,7 @@ def revogar_consentimento_view(request):
             )
             messages.success(request, "Consentimento restaurado com sucesso!")
             return redirect('perfil')
-            
+
     return redirect('perfil')
 
 
@@ -346,9 +348,9 @@ def encerrar_conta_view(request):
     if request.method == 'POST':
         usuario = request.user
         ip = get_client_ip(request)
-        
+
         prefixo = f"anon_{usuario.id}"
-        
+
         RegistroAuditoria.objects.create(
             usuario=usuario,
             acao='DELETE',
@@ -356,28 +358,28 @@ def encerrar_conta_view(request):
             descricao='Usuário solicitou encerramento de conta. Dados pessoais anonimizados.',
             ip_origem=ip
         )
-        
+
         usuario.username = prefixo
         usuario.first_name = "Usuário"
         usuario.last_name = "Anonimizado"
         usuario.email = f"{prefixo}@emprestacampus.local"
         usuario.matricula = prefixo
-        
+
         usuario.is_active = False
-        usuario.set_unusable_password() 
+        usuario.set_unusable_password()
         usuario.save()
         logout(request)
-        
+
         messages.success(request, "Conta encerrada. Seus dados pessoais foram anonimizados irreversivelmente.")
         return redirect('login_web')
-        
+
     return redirect('perfil')
 
 
 @login_required
 def exportar_dados_view(request):
     usuario = request.user
-    
+
     dados_pessoais = {
         "id_conta": usuario.id,
         "usuario": usuario.username,
@@ -388,10 +390,10 @@ def exportar_dados_view(request):
         "data_criacao_conta": usuario.date_joined.strftime("%d/%m/%Y %H:%M:%S") if usuario.date_joined else None,
         "status_conta": "Ativa" if usuario.is_active else "Inativa",
     }
-    
+
     response = JsonResponse(dados_pessoais, json_dumps_params={'ensure_ascii': False, 'indent': 4})
     response['Content-Disposition'] = f'attachment; filename="dados_pessoais_{usuario.username}.json"'
-    
+
     return response
 
 
@@ -405,7 +407,7 @@ def configurar_2fa_view(request):
         if device and device.verify_token(codigo):
             device.confirmed = True
             device.save()
-            
+
             RegistroAuditoria.objects.create(
                 usuario=request.user,
                 acao='UPDATE',
@@ -413,25 +415,25 @@ def configurar_2fa_view(request):
                 descricao='Autenticação de Dois Fatores (2FA) ativada com sucesso.',
                 ip_origem=ip
             )
-            
+
             messages.success(request, 'Autenticação de Dois Fatores (2FA) ativada com sucesso!')
             return redirect('perfil')
         else:
             messages.error(request, 'Código inválido. Tente novamente.')
 
     TOTPDevice.objects.filter(user=request.user, confirmed=False).delete()
-    
+
     device = TOTPDevice.objects.create(
         user=request.user,
         name="dispositivo-padrao",
         confirmed=False,
     )
-    
+
     img = qrcode.make(device.config_url)
     buffer = io.BytesIO()
     img.save(buffer, format="PNG")
     qr_b64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
-    
+
     return render(request, 'usuarios/configurar_2fa.html', {'qr_code': qr_b64})
 
 
@@ -441,18 +443,18 @@ def reativar_conta_lgpd_view(request):
 
     if not user_id:
         return redirect('login_web')
-        
+
     usuario = Usuario.objects.filter(id=user_id).first()
     if not usuario:
         return redirect('login_web')
-        
+
     if request.method == 'POST':
         usuario.consentimento_dados = True
         usuario.data_consentimento = timezone.now()
         usuario.versao_documento_aceito = "v1.0"
         usuario.is_active = True
         usuario.save()
-        
+
         RegistroAuditoria.objects.create(
             usuario=usuario,
             acao='UPDATE',
@@ -460,9 +462,143 @@ def reativar_conta_lgpd_view(request):
             descricao='Conta reativada e consentimento restaurado.',
             ip_origem=ip
         )
-        
+
         del request.session['usuario_inativo_id']
         messages.success(request, "Consentimento restaurado e conta reativada com sucesso! Faça login novamente.")
         return redirect('login_web')
-        
+
     return render(request, 'usuarios/reativar_conta.html', {'usuario': usuario})
+
+
+# Token intermediario do login JWT com 2FA.
+#
+# Emitido por LoginAPIView so depois da senha correta e exigido por
+# VerificarDoisFatoresLoginView. E assinado com a SECRET_KEY (nao da
+# para forjar a partir de um user_id) e expira em
+# TOKEN_2FA_VALIDADE_SEGUNDOS, entao a segunda etapa nunca e acessivel
+# sem ter passado pela primeira.
+TOKEN_2FA_SALT = "usuarios.login_spa_2fa"
+TOKEN_2FA_VALIDADE_SEGUNDOS = 300
+
+
+def gerar_token_2fa(usuario):
+    return signing.dumps({"uid": usuario.id}, salt=TOKEN_2FA_SALT)
+
+
+def ler_token_2fa(token):
+    """Devolve o usuario do token, ou None se invalido, adulterado ou expirado."""
+    try:
+        dados = signing.loads(token, salt=TOKEN_2FA_SALT, max_age=TOKEN_2FA_VALIDADE_SEGUNDOS)
+    except (signing.BadSignature, TypeError):
+        # SignatureExpired e subclasse de BadSignature
+        return None
+    return Usuario.objects.filter(id=dados.get("uid"), is_active=True).first()
+
+
+class LoginAPIView(APIView):
+    """
+    Login para clientes JWT (SPA React), com suporte a 2FA.
+
+    Diferente do TokenObtainPairView padrao do simplejwt, esta view
+    verifica se o usuario tem 2FA confirmado antes de emitir o par de
+    tokens. Se tiver, devolve apenas um sinal pedindo o codigo, sem
+    nenhum token ainda, ate a segunda etapa ser concluida em
+    VerificarDoisFatoresLoginView.
+    """
+
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        username = request.data.get("username", "")
+        password = request.data.get("password", "")
+        ip = get_client_ip(request)
+
+        user = authenticate(request, username=username, password=password)
+
+        if user is None:
+            RegistroAuditoria.objects.create(
+                usuario=None,
+                acao='LOGIN_FALHA',
+                modulo_afetado='Autenticação/API',
+                descricao=f'Credenciais invalidas via API. Login tentado: {username}',
+                ip_origem=ip,
+            )
+            return Response({"detail": "Credenciais invalidas."}, status=status.HTTP_401_UNAUTHORIZED)
+
+        tem_2fa = TOTPDevice.objects.filter(user=user, confirmed=True).exists()
+
+        if tem_2fa:
+            return Response(
+                {"requer_2fa": True, "token_2fa": gerar_token_2fa(user)},
+                status=status.HTTP_200_OK,
+            )
+
+        RegistroAuditoria.objects.create(
+            usuario=user,
+            acao='LOGIN_SUCESSO',
+            modulo_afetado='Autenticação/API',
+            descricao='Login via API concluido com sucesso (sem 2FA).',
+            ip_origem=ip,
+        )
+
+        refresh = RefreshToken.for_user(user)
+        return Response(
+            {
+                "requer_2fa": False,
+                "access": str(refresh.access_token),
+                "refresh": str(refresh),
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class VerificarDoisFatoresLoginView(APIView):
+    """
+    Segunda etapa do login JWT para usuarios com 2FA confirmado.
+
+    So emite o par de tokens depois do codigo TOTP correto, nunca
+    antes. O usuario vem do token_2fa assinado devolvido por
+    LoginAPIView (uma SPA nao usa sessao Django), nunca de um id
+    enviado pelo cliente.
+    """
+
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        token = request.data.get("token_2fa", "")
+        codigo = request.data.get("codigo", "")
+        ip = get_client_ip(request)
+
+        usuario = ler_token_2fa(token)
+
+        if not usuario:
+            return Response(
+                {"detail": "Sessao de login invalida ou expirada. Entre novamente."},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        device = TOTPDevice.objects.filter(user=usuario, confirmed=True).first()
+
+        if not device or not device.verify_token(codigo):
+            RegistroAuditoria.objects.create(
+                usuario=usuario,
+                acao='2FA_FALHA',
+                modulo_afetado='Autenticação/API',
+                descricao='Codigo incorreto no login via API.',
+                ip_origem=ip,
+            )
+            return Response({"detail": "Codigo invalido."}, status=status.HTTP_400_BAD_REQUEST)
+
+        RegistroAuditoria.objects.create(
+            usuario=usuario,
+            acao='2FA_SUCESSO',
+            modulo_afetado='Autenticação/API',
+            descricao='2FA via API concluido com sucesso.',
+            ip_origem=ip,
+        )
+
+        refresh = RefreshToken.for_user(usuario)
+        return Response(
+            {"access": str(refresh.access_token), "refresh": str(refresh)},
+            status=status.HTTP_200_OK,
+        )

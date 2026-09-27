@@ -13,6 +13,8 @@ from .views import (
     AtivarDoisFatoresView,
     ConfirmarDoisFatoresView,
     validar_dois_fatores_view,
+    LoginAPIView,
+    VerificarDoisFatoresLoginView,
 )
 
 urlpatterns = [
@@ -20,6 +22,8 @@ urlpatterns = [
     path("registro/", RegistroView.as_view(), name="registro"),
     path("login/", TokenObtainPairView.as_view(), name="login_api"),
     path("login/renovar/", TokenRefreshView.as_view(), name="login_renovar"),
+    path("login/spa/", LoginAPIView.as_view(), name="login_spa"),
+    path("login/spa/2fa/", VerificarDoisFatoresLoginView.as_view(), name="login_spa_2fa"),
     path("recuperar-senha/", SolicitarRecuperacaoSenhaView.as_view(), name="recuperar_senha"),
     path("redefinir-senha/", RedefinirSenhaView.as_view(), name="redefinir_senha"),
     path("2fa/ativar/", AtivarDoisFatoresView.as_view(), name="ativar_2fa"),
