@@ -7,3 +7,5 @@ django-axes
 django-otp
 qrcode[pil]
 cryptography
+pytest
+pytest-django
