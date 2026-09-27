@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meus Empréstimos - EmprestaCampus</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; background-color: #f3f4f6; color: #333; }
+        .navbar { background-color: #2563eb; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; color: white; }
+        .navbar h1 { margin: 0; font-size: 20px; }
+        .navbar-links a { color: white; text-decoration: none; margin-left: 20px; font-weight: bold; font-size: 14px; }
+        .container { max-width: 1000px; margin: 40px auto; padding: 20px; }
+        table { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        th, td { padding: 12px 16px; text-align: left; border-bottom: 1px solid #e5e7eb; }
+        th { background-color: #2563eb; color: white; }
+        .status-SOLICITADO { color: #d97706; font-weight: bold; }
+        .status-APROVADO { color: #2563eb; font-weight: bold; }
+        .status-REJEITADO { color: #dc2626; font-weight: bold; }
+        .status-DEVOLVIDO { color: #16a34a; font-weight: bold; }
+        .tag-atraso { background: #dc2626; color: white; font-size: 11px; padding: 2px 6px; border-radius: 4px; margin-left: 6px; }
+        .btn-prorrogar { padding: 6px 12px; font-size: 13px; background-color: #2563eb; color: white; border: none; border-radius: 5px; cursor: pointer; font-family: inherit; }
+        .btn-prorrogar:hover { background-color: #1d4ed8; }
+        .tag-prorrogacao { color: #d97706; font-weight: bold; font-size: 13px; }
+    </style>
+</head>
+<body>
+
+    <nav class="navbar">
+        <h1>EmprestaCampus</h1>
+        <div class="navbar-links">
+            <a href="{% url 'home' %}">← Voltar à Home</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <h2>Meus Empréstimos</h2>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Equipamento</th>
+                    <th>Solicitado em</th>
+                    <th>Devolução prevista</th>
+                    <th>Status</th>
+                    <th>Ação</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for emprestimo in emprestimos %}
+                <tr>
+                    <td>{{ emprestimo.equipamento.nome }}</td>
+                    <td>{{ emprestimo.data_solicitacao|date:"d/m/Y H:i" }}</td>
+                    <td>{{ emprestimo.data_devolucao_prevista|date:"d/m/Y H:i"|default:"Aguardando aprovação" }}</td>
+                    <td class="status-{{ emprestimo.status }}">
+                        {{ emprestimo.get_status_display }}
+                        {% if emprestimo.esta_atrasado %}<span class="tag-atraso">ATRASADO</span>{% endif %}
+                        {% if emprestimo.status == 'REJEITADO' %}
+                            <br><small style="color:#6b7280; font-weight:normal;">Você pode solicitar novamente no catálogo.</small>
+                        {% endif %}
+                    </td>
+
+                    <td>
+                        {% if emprestimo.status == 'APROVADO' and emprestimo.prorrogacao_solicitada %}
+                            <span class="tag-prorrogacao">Prorrogação pendente</span>
+                        {% elif emprestimo.status == 'APROVADO' %}
+                            <form method="post" action="{% url 'solicitar_prorrogacao_web' emprestimo.id %}" style="margin:0;">
+                                {% csrf_token %}
+                                <button type="submit" class="btn-prorrogar">Solicitar prorrogação</button>
+                            </form>
+                        {% else %}
+                            —
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5">Você ainda não fez nenhuma solicitação.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+<!-- Detecta o fuso horário do navegador e salva num cookie, lido
+         pelo FusoHorarioUsuarioMiddleware nas próximas requisições. -->
+    <script>
+        (function () {
+            var fuso = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            document.cookie = "fuso_horario_usuario=" + fuso + ";path=/;max-age=31536000";
+        })();
+    </script>
+
+</body>
+</html>

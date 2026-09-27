@@ -24,8 +24,6 @@
     <nav class="navbar">
         <h1>EmprestaCampus</h1>
         <div class="navbar-links">
-            <a href="{% url 'catalogo_web' %}">Equipamentos</a>
-            <a href="#">Meus Empréstimos</a>
             <a href="{% url 'perfil' %}">Meu Perfil</a>
             <a href="{% url 'logout_web' %}">Sair</a>
         </div>
@@ -48,10 +46,19 @@
             <div class="card">
                 <h3>Meus Empréstimos</h3>
                 <p>Acompanhe o status das suas solicitações e verifique prazos de devolução.</p>
-                <a href="#" class="btn-action">Acessar Histórico</a>
+                <a href="{% url 'meus_emprestimos_web' %}" class="btn-action">Acessar Histórico</a>
             </div>
         </div>
     </div>
+
+<!-- Detecta o fuso horário do navegador e salva num cookie, lido
+         pelo FusoHorarioUsuarioMiddleware nas próximas requisições. -->
+    <script>
+        (function () {
+            var fuso = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            document.cookie = "fuso_horario_usuario=" + fuso + ";path=/;max-age=31536000";
+        })();
+    </script>
 
 </body>
 </html>

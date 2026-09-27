@@ -60,6 +60,7 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'axes.middleware.AxesMiddleware',
+    'config.middleware.FusoHorarioUsuarioMiddleware',
 ]
 
 ROOT_URLCONF = 'config.urls'
@@ -156,6 +157,11 @@ SIMPLE_JWT = {
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 DEFAULT_FROM_EMAIL = "naoresponda@empresta-campus.local"
 FRONTEND_URL = "http://localhost:5173"
+
+# Prazo padrão (em dias) para devolução de equipamentos, contado a
+# partir da data de retirada (aprovação do empréstimo).
+PRAZO_PADRAO_EMPRESTIMO_DIAS = 7
+
 # Custo do PBKDF2 (hash de senha).
 #
 # 600.000 iterações é o mínimo recomendado pela OWASP (2023) para
@@ -227,3 +233,7 @@ SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 # Usar chaves diferentes para propósitos diferentes limita o dano se
 # uma delas vazar.
 ENCRYPTION_KEY = env("ENCRYPTION_KEY")
+# Template customizado exibido quando o Axes bloqueia um login por
+# excesso de tentativas (item 1.11). Sem isso, o Axes usa uma página
+# em texto puro, sem nenhum estilo do projeto.
+AXES_LOCKOUT_TEMPLATE = "usuarios/lockout.html"

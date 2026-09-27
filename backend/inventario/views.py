@@ -96,6 +96,23 @@ class EquipamentoDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 @login_required(login_url='/api/usuarios/entrar/')
 def catalogo_view(request):
+    """
+    Tela HTML de consulta do catálogo. select_related('categoria')
+    evita N+1 queries pra mostrar o nome da categoria de cada
+    equipamento.
+    """
+    from emprestimos.models import Emprestimo  # import local pra evitar import circular entre os apps
 
     equipamentos = Equipamento.objects.select_related('categoria').all()
-    return render(request, 'inventario/catalogo.html', {'equipamentos': equipamentos})
+
+    equipamentos_ja_solicitados = set(
+        Emprestimo.objects.filter(
+            usuario=request.user,
+            status__in=['SOLICITADO', 'APROVADO'],
+        ).values_list('equipamento_id', flat=True)
+    )
+
+    return render(request, 'inventario/catalogo.html', {
+        'equipamentos': equipamentos,
+        'equipamentos_ja_solicitados': equipamentos_ja_solicitados,
+    })
