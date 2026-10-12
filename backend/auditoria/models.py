@@ -1,5 +1,17 @@
 from django.db import models
 from django.conf import settings
+from django.core.exceptions import ValidationError
+
+class RegistroAuditoriaQuerySet(models.QuerySet):
+    def update(self, **kwargs):
+        raise ValidationError("Registros de auditoria são imutáveis e não podem ser atualizados em lote.")
+
+    def delete(self):
+        raise ValidationError("Registros de auditoria são imutáveis e não podem ser excluídos em lote.")
+
+class RegistroAuditoriaManager(models.Manager):
+    def get_queryset(self):
+        return RegistroAuditoriaQuerySet(self.model, using=self._db)
 
 class RegistroAuditoria(models.Model):
     ACAO_CHOICES = [
@@ -16,19 +28,22 @@ class RegistroAuditoria(models.Model):
         ('RECUPERACAO_FALHA', 'Falha na Recuperação'),
     ]
 
-    # SET_NULL é vital para a auditoria. Se um utilizador for apagado da base, 
-    # o histórico das ações é preservado (a FK recebe NULL, mas o registo não é apagado).
     usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
-    
     acao = models.CharField(max_length=50, choices=ACAO_CHOICES)
-    modulo_afetado = models.CharField(max_length=50) 
+    modulo_afetado = models.CharField(max_length=50)
     descricao = models.TextField()
-    
-    # Mapeado para o tipo 'inet' no PostgreSQL. Valida nativamente formatos IPv4 e IPv6.
     ip_origem = models.GenericIPAddressField(null=True, blank=True)
-    
-    # auto_now_add garante a imutabilidade temporal do log
     data_hora = models.DateTimeField(auto_now_add=True)
+
+    objects = RegistroAuditoriaManager()
+
+    def save(self, *args, **kwargs):
+        if self.pk:
+            raise ValidationError("Um registro de auditoria existente não pode ser modificado.")
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError("Registros de auditoria não podem ser excluídos.")
 
     def __str__(self):
         user = self.usuario.username if self.usuario else "Sistema"
