@@ -15,14 +15,13 @@ def get_client_ip(request):
     return request.META.get('REMOTE_ADDR')
 
 
-class IsAdminOuTecnico(permissions.BasePermission):
+class IsAdmin(permissions.BasePermission):
     """
     Permissão customizada baseada no RBAC do model Usuario (campo 'papel').
 
     Qualquer usuário autenticado pode LER o catálogo (GET), mas só
-    ADMIN ou TECNICO podem CRIAR/EDITAR/EXCLUIR equipamentos e
-    categorias, são eles que fazem a gestão física do inventário,
-    não o aluno que só empresta.
+    o ADMIN pode CRIAR/EDITAR/EXCLUIR equipamentos e categorias, pois
+    é ele quem faz a gestão do inventário, não o aluno que só empresta.
     """
 
     def has_permission(self, request, view):
@@ -31,27 +30,27 @@ class IsAdminOuTecnico(permissions.BasePermission):
         return bool(
             request.user
             and request.user.is_authenticated
-            and request.user.papel in ("ADMIN", "TECNICO")
+            and request.user.papel == "ADMIN"
         )
 
 
 class CategoriaListCreateView(generics.ListCreateAPIView):
     queryset = Categoria.objects.all()
     serializer_class = CategoriaSerializer
-    permission_classes = [IsAdminOuTecnico]
+    permission_classes = [IsAdmin]
 
 
 class CategoriaDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Categoria.objects.all()
     serializer_class = CategoriaSerializer
-    permission_classes = [IsAdminOuTecnico]
+    permission_classes = [IsAdmin]
 
 
 class EquipamentoListCreateView(generics.ListCreateAPIView):
 
     queryset = Equipamento.objects.select_related("categoria").all()
     serializer_class = EquipamentoSerializer
-    permission_classes = [IsAdminOuTecnico]
+    permission_classes = [IsAdmin]
 
     def perform_create(self, serializer):
         equipamento = serializer.save()
@@ -69,7 +68,7 @@ class EquipamentoDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     queryset = Equipamento.objects.select_related("categoria").all()
     serializer_class = EquipamentoSerializer
-    permission_classes = [IsAdminOuTecnico]
+    permission_classes = [IsAdmin]
 
     def perform_update(self, serializer):
         equipamento = serializer.save()

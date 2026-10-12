@@ -6,8 +6,13 @@ from django.contrib.auth import authenticate
 from django.test import Client
 from django_otp.oath import TOTP
 from django_otp.plugins.otp_totp.models import TOTPDevice
+from rest_framework_simplejwt.tokens import RefreshToken
 
+from inventario.models import Categoria
 from usuarios.models import TokenRecuperacaoSenha, Usuario
+
+from notificacoes.models import Notificacao
+from notificacoes.utils import notificar_admins
 
 
 @pytest.mark.django_db
@@ -265,3 +270,221 @@ class TestLoginSpaDoisFatores:
         assert resposta.status_code == 200
         assert resposta.json()["requer_2fa"] is False
         assert "access" in resposta.json()
+
+
+@pytest.mark.django_db
+class TestCadastroNaoPermitePapelPrivilegiado:
+    """
+    Escalada de privilegio no cadastro publico: ninguem pode se
+    auto-atribuir o papel ADMIN enviando o campo "papel" direto para a
+    API. Tambem confirma que a permissao do inventario (IsAdmin) so
+    deixa o ADMIN escrever.
+    """
+
+    URL_REGISTRO = "/api/usuarios/registro/"
+    URL_EQUIPAMENTOS = "/api/inventario/equipamentos/"
+
+    def _dados_cadastro(self, **extra):
+        dados = {
+            "username": "teste_papel",
+            "first_name": "Teste",
+            "last_name": "Papel",
+            "email": "teste_papel@exemplo.com",
+            "password": "senha12345",
+            "matricula": "2026001",
+            "consentimento_dados": True,
+        }
+        dados.update(extra)
+        return dados
+
+    def _cadastrar(self, **extra):
+        return Client().post(
+            self.URL_REGISTRO,
+            self._dados_cadastro(**extra),
+            content_type="application/json",
+        )
+
+    def test_cadastro_com_papel_admin_e_recusado(self):
+        resposta = self._cadastrar(papel="ADMIN")
+
+        assert resposta.status_code == 400
+        assert "papel" in resposta.json()
+        assert not Usuario.objects.filter(username="teste_papel").exists()
+
+    def test_cadastro_com_papel_inexistente_e_recusado(self):
+        # O TECNICO foi removido do sistema; o valor nao existe mais.
+        resposta = self._cadastrar(papel="TECNICO")
+
+        assert resposta.status_code == 400
+        assert not Usuario.objects.filter(username="teste_papel").exists()
+
+    def test_cadastro_com_papel_aluno_e_aceito(self):
+        resposta = self._cadastrar(papel="ALUNO")
+
+        assert resposta.status_code == 201
+        assert Usuario.objects.get(username="teste_papel").papel == "ALUNO"
+
+    def test_cadastro_sem_papel_vira_aluno_por_padrao(self):
+        resposta = self._cadastrar()
+
+        assert resposta.status_code == 201
+        assert Usuario.objects.get(username="teste_papel").papel == "ALUNO"
+
+    def _post_equipamento_como(self, usuario, categoria):
+        # A API usa autenticacao JWT (nao sessao), entao o teste manda o token.
+        token = str(RefreshToken.for_user(usuario).access_token)
+        return Client().post(
+            self.URL_EQUIPAMENTOS,
+            {
+                "nome": "Notebook de teste",
+                "patrimonio": "PAT-TESTE-1",
+                "categoria": categoria.id,
+            },
+            content_type="application/json",
+            HTTP_AUTHORIZATION=f"Bearer {token}",
+        )
+
+    def test_aluno_nao_consegue_cadastrar_equipamento(self):
+        aluno = Usuario.objects.create_user(
+            username="teste_aluno_inv", password="senha12345", papel="ALUNO"
+        )
+        categoria = Categoria.objects.create(nome="Categoria de teste")
+
+        resposta = self._post_equipamento_como(aluno, categoria)
+
+        assert resposta.status_code == 403
+
+    def test_admin_consegue_cadastrar_equipamento(self):
+        admin = Usuario.objects.create_user(
+            username="teste_admin_inv", password="senha12345", papel="ADMIN"
+        )
+        categoria = Categoria.objects.create(nome="Categoria de teste")
+
+        resposta = self._post_equipamento_como(admin, categoria)
+
+        assert resposta.status_code == 201
+
+@pytest.mark.django_db
+class TestPapelManda:
+    """
+    O campo 'papel' é a fonte única da verdade sobre privilégios:
+    ADMIN tem is_staff e is_superuser, qualquer outro papel não tem.
+    Garante que não existe mais "admin só no papel" nem "admin só no
+    is_staff" (as duas formas de administrador ficam sempre sincronizadas).
+    """
+
+    def test_admin_nasce_com_acesso_administrativo(self):
+        admin = Usuario.objects.create_user(
+            username="teste_papel_admin", password="senha12345", papel="ADMIN"
+        )
+
+        assert admin.is_staff is True
+        assert admin.is_superuser is True
+
+    def test_aluno_nasce_sem_acesso_administrativo(self):
+        aluno = Usuario.objects.create_user(
+            username="teste_papel_aluno", password="senha12345", papel="ALUNO"
+        )
+
+        assert aluno.is_staff is False
+        assert aluno.is_superuser is False
+
+    def test_forcar_is_staff_em_aluno_e_revertido(self):
+        """
+        Mesmo que alguém marque is_staff direto (por exemplo no /admin/),
+        o papel prevalece e o save() desfaz.
+        """
+        usuario = Usuario.objects.create_user(
+            username="teste_forca_staff", password="senha12345", papel="ALUNO"
+        )
+        usuario.is_staff = True
+        usuario.is_superuser = True
+        usuario.save()
+        usuario.refresh_from_db()
+
+        assert usuario.is_staff is False
+        assert usuario.is_superuser is False
+
+    def test_promover_a_admin_concede_acesso(self):
+        usuario = Usuario.objects.create_user(
+            username="teste_promocao", password="senha12345", papel="ALUNO"
+        )
+        usuario.papel = "ADMIN"
+        usuario.save()
+        usuario.refresh_from_db()
+
+        assert usuario.is_staff is True
+        assert usuario.is_superuser is True
+
+    def test_rebaixar_admin_remove_acesso(self):
+        usuario = Usuario.objects.create_user(
+            username="teste_rebaixa", password="senha12345", papel="ADMIN"
+        )
+        usuario.papel = "ALUNO"
+        usuario.save()
+        usuario.refresh_from_db()
+
+        assert usuario.is_staff is False
+        assert usuario.is_superuser is False
+
+    def test_save_parcial_do_papel_tambem_sincroniza(self):
+        """
+        save(update_fields=["papel"]) só gravaria o papel; o model inclui
+        is_staff e is_superuser junto para a mudança não ficar pela metade.
+        """
+        usuario = Usuario.objects.create_user(
+            username="teste_parcial", password="senha12345", papel="ALUNO"
+        )
+        usuario.papel = "ADMIN"
+        usuario.save(update_fields=["papel"])
+        usuario.refresh_from_db()
+
+        assert usuario.is_staff is True
+        assert usuario.is_superuser is True
+
+    def test_createsuperuser_cria_conta_com_papel_admin(self):
+        usuario = Usuario.objects.create_superuser(
+            username="teste_super", email="super@exemplo.com", password="senha12345"
+        )
+
+        assert usuario.papel == "ADMIN"
+        assert usuario.is_staff is True
+        assert usuario.is_superuser is True
+
+    def test_admin_acessa_o_django_admin_e_aluno_nao(self):
+        admin = Usuario.objects.create_user(
+            username="teste_acesso_admin", password="senha12345", papel="ADMIN"
+        )
+        aluno = Usuario.objects.create_user(
+            username="teste_acesso_aluno", password="senha12345", papel="ALUNO"
+        )
+        backend = "django.contrib.auth.backends.ModelBackend"
+
+        client_admin = Client()
+        client_admin.force_login(admin, backend=backend)
+        assert client_admin.get("/admin/").status_code == 200
+
+        client_aluno = Client()
+        client_aluno.force_login(aluno, backend=backend)
+        resposta = client_aluno.get("/admin/")
+        assert resposta.status_code == 302
+        assert "/admin/login/" in resposta.url
+
+    def test_notificar_admins_alcanca_so_os_administradores(self):
+        admin = Usuario.objects.create_user(
+            username="teste_notif_admin",
+            password="senha12345",
+            email="admin@exemplo.com",
+            papel="ADMIN",
+        )
+        aluno = Usuario.objects.create_user(
+            username="teste_notif_aluno",
+            password="senha12345",
+            email="aluno@exemplo.com",
+            papel="ALUNO",
+        )
+
+        notificar_admins("Nova solicitação de teste.")
+
+        assert Notificacao.objects.filter(usuario=admin).count() == 1
+        assert not Notificacao.objects.filter(usuario=aluno).exists()

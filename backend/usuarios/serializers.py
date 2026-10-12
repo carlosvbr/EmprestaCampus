@@ -2,6 +2,14 @@
 
 from .models import Usuario
 
+# Papéis que o próprio usuário pode escolher ao se cadastrar.
+# ADMIN fica de fora de propósito: ele concede poderes administrativos
+# (escrita no inventário pela API), então só pode ser atribuído por um
+# administrador, no /admin/. Se o cadastro público aceitasse esse valor,
+# qualquer pessoa poderia se auto-promover enviando "papel": "ADMIN"
+# direto para a API.
+PAPEIS_AUTOCADASTRO = ["ALUNO", "DOCENTE"]
+
 
 class RegistroSerializer(serializers.ModelSerializer):
     """
@@ -16,7 +24,7 @@ class RegistroSerializer(serializers.ModelSerializer):
     first_name = serializers.CharField(required=True)
     last_name = serializers.CharField(required=True)
     matricula = serializers.CharField(required=True, max_length=20)
-    
+
     # --- LGPD: Validação explícita do consentimento ---
     consentimento_dados = serializers.BooleanField(
         required=True,
@@ -26,6 +34,19 @@ class RegistroSerializer(serializers.ModelSerializer):
     class Meta:
         model = Usuario
         fields = ["id","username","first_name","last_name","email","password","papel","matricula","telefone","consentimento_dados"]
+
+    def validate_papel(self, value):
+        """
+        Barra, com Erro 400, qualquer tentativa de se cadastrar com um
+        papel privilegiado. Roda só quando o cliente envia o campo; se
+        ele for omitido, vale o default do model (ALUNO).
+        """
+        if value not in PAPEIS_AUTOCADASTRO:
+            raise serializers.ValidationError(
+                "Este perfil não pode ser escolhido no cadastro. "
+                "Perfis administrativos são atribuídos por um administrador."
+            )
+        return value
 
     def validate_consentimento_dados(self, value):
         """

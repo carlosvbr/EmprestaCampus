@@ -1,7 +1,7 @@
 import secrets
 from datetime import timedelta
 
-from django.contrib.auth.models import AbstractUser
+from django.contrib.auth.models import AbstractUser, UserManager
 from django.db import models
 from django.utils import timezone
 
@@ -11,8 +11,21 @@ from .crypto import CampoCriptografado
 class Papel(models.TextChoices):
     ALUNO = "ALUNO", "Aluno"
     DOCENTE = "DOCENTE", "Docente"
-    TECNICO = "TECNICO", "Técnico"
     ADMIN = "ADMIN", "Administrador"
+
+
+class UsuarioManager(UserManager):
+    """
+    Manager do Usuario. A única diferença para o padrão do Django é o
+    create_superuser (usado pelo comando createsuperuser): ele cria a
+    conta já com papel ADMIN. Sem isso, o superusuário nasceria com o
+    papel padrão (ALUNO) e o save() do model, que sincroniza is_staff e
+    is_superuser a partir do papel, o rebaixaria na hora.
+    """
+
+    def create_superuser(self, username, email=None, password=None, **extra_fields):
+        extra_fields.setdefault("papel", Papel.ADMIN)
+        return super().create_superuser(username, email, password, **extra_fields)
 
 
 class Usuario(AbstractUser):
@@ -23,7 +36,13 @@ class Usuario(AbstractUser):
     já com hash, email, etc). Adicionamos o campo 'papel' para controle
     de acesso baseado em papel (RBAC), que define o que cada usuário
     pode fazer no fluxo de empréstimo.
+
+    O 'papel' é a fonte única da verdade sobre privilégios: ADMIN tem
+    is_staff e is_superuser (acesso ao /admin/ e às ações de aprovação),
+    qualquer outro papel não tem. Essa sincronização é feita no save().
     """
+
+    objects = UsuarioManager()
 
     papel = models.CharField(
         max_length=10,
@@ -67,6 +86,24 @@ class Usuario(AbstractUser):
         if self.consentimento_dados and not self.data_consentimento:
             self.data_consentimento = timezone.now()
             self.versao_documento_aceito = "v1.0" 
+
+        # RBAC: o papel manda. is_staff (entrar no /admin/) e is_superuser
+        # (ter todas as permissões lá dentro) acompanham o papel ADMIN, e
+        # só ele. Assim não existe mais "admin só no papel" nem "admin só
+        # no is_staff": quem aprova empréstimos, recebe as notificações de
+        # solicitação (notificar_admins) e escreve no inventário é sempre
+        # o mesmo conjunto de pessoas.
+        eh_admin = self.papel == Papel.ADMIN
+        self.is_staff = eh_admin
+        self.is_superuser = eh_admin
+
+        # Se o save foi parcial (update_fields) e mexeu no papel, os dois
+        # campos derivados precisam ir junto, senão a mudança não chega
+        # ao banco.
+        update_fields = kwargs.get("update_fields")
+        if update_fields is not None and "papel" in update_fields:
+            kwargs["update_fields"] = {*update_fields, "is_staff", "is_superuser"}
+
         super().save(*args, **kwargs)
 
     def __str__(self):
