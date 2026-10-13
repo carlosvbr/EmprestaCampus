@@ -36,6 +36,8 @@ class EmprestimoAdmin(admin.ModelAdmin):
 
         for emprestimo in pendentes:
 
+            emprestimo.equipamento.refresh_from_db()
+
             if emprestimo.equipamento.status != 'DISPONIVEL':
                 continue
 

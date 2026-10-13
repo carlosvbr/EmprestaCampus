@@ -1,5 +1,7 @@
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render
+from django.db.models import ProtectedError
+from rest_framework.exceptions import ValidationError
 from rest_framework import generics, permissions
 
 from auditoria.models import RegistroAuditoria
@@ -45,6 +47,14 @@ class CategoriaDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = CategoriaSerializer
     permission_classes = [IsAdmin]
 
+    def perform_destroy(self, instance):
+        try:
+            instance.delete()
+        except ProtectedError:
+            raise ValidationError(
+                "Esta categoria possui equipamentos cadastrados e não pode ser excluída."
+            )
+
 
 class EquipamentoListCreateView(generics.ListCreateAPIView):
 
@@ -84,6 +94,15 @@ class EquipamentoDetailView(generics.RetrieveUpdateDestroyAPIView):
         # Guarda os dados antes de apagar, porque depois do delete()
         # a instância não existe mais para ser lida na descrição do log.
         descricao = f'Equipamento excluído: {instance.nome} (patrimônio {instance.patrimonio}).'
+        try:
+            instance.delete()
+        except ProtectedError:
+
+            raise ValidationError(
+                "Este equipamento tem empréstimos no histórico e não pode ser excluído. "
+                "Marque-o como Inativo."
+            )
+        
         RegistroAuditoria.objects.create(
             usuario=self.request.user,
             acao='DELETE',
@@ -91,7 +110,6 @@ class EquipamentoDetailView(generics.RetrieveUpdateDestroyAPIView):
             descricao=descricao,
             ip_origem=get_client_ip(self.request),
         )
-        instance.delete()
 
 @login_required(login_url='/api/usuarios/entrar/')
 def catalogo_view(request):
