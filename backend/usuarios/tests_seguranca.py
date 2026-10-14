@@ -1,7 +1,9 @@
 import time
-from unittest.mock import patch
-
 import pytest
+
+from unittest.mock import patch
+from django.db import connection
+from django.urls import reverse
 from django.contrib.auth import authenticate
 from django.test import Client
 from django_otp.oath import TOTP
@@ -10,7 +12,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from inventario.models import Categoria
 from usuarios.models import TokenRecuperacaoSenha, Usuario
-
+from auditoria.models import RegistroAuditoria
 from notificacoes.models import Notificacao
 from notificacoes.utils import notificar_admins
 
@@ -488,3 +490,321 @@ class TestPapelManda:
 
         assert Notificacao.objects.filter(usuario=admin).count() == 1
         assert not Notificacao.objects.filter(usuario=aluno).exists()
+
+
+BACKEND_SESSAO = "django.contrib.auth.backends.ModelBackend"
+
+
+def _cliente_logado(usuario):
+    cliente = Client()
+    cliente.force_login(usuario, backend=BACKEND_SESSAO)
+    return cliente
+
+
+def _ativar_2fa(usuario, confirmado=True):
+    return TOTPDevice.objects.create(
+        user=usuario, name="dispositivo-padrao", confirmed=confirmado
+    )
+
+
+def _usuario_completo(username="perfil_completo", matricula="2026123"):
+    """Usuário com todos os campos que a página Meu Perfil mostra."""
+    return Usuario.objects.create_user(
+        username=username,
+        first_name="Maria",
+        last_name="Silva",
+        email=f"{username}@exemplo.com",
+        matricula=matricula,
+        telefone="11999998888",
+        papel="DOCENTE",
+        consentimento_dados=True,
+    )
+
+
+@pytest.mark.django_db
+class TestRevogacaoDoisFatores:
+    """
+    O usuário pode desativar o próprio 2FA. A ação não pede senha, então
+    compensa com rastro na auditoria e e-mail de aviso ao dono da conta.
+    """
+
+    def _revogar(self, cliente, **extra):
+        return cliente.post(reverse("revogar_2fa"), **extra)
+
+    def test_revogar_remove_o_dispositivo(self, cliente_aluno, aluno):
+        _ativar_2fa(aluno)
+
+        resposta = self._revogar(cliente_aluno)
+
+        assert resposta.status_code == 302
+        assert not TOTPDevice.objects.filter(user=aluno).exists()
+
+    def test_depois_de_revogar_o_login_volta_a_entrar_so_com_senha(self):
+        usuario = Usuario.objects.create_user(
+            username="teste_revoga_login",
+            password="senha12345",
+            consentimento_dados=True,
+        )
+        _ativar_2fa(usuario)
+        dados = {"username": "teste_revoga_login", "password": "senha12345"}
+
+        # Com 2FA ligado, a senha sozinha leva para a tela do código.
+        antes = Client().post("/api/usuarios/entrar/", dados)
+        assert antes.url == reverse("validar_2fa_web")
+
+        self._revogar(_cliente_logado(usuario))
+
+        # Depois de revogar, a mesma senha entra direto na home.
+        depois = Client().post("/api/usuarios/entrar/", dados)
+        assert depois.url == reverse("home")
+
+    def test_visitante_sem_login_e_mandado_para_o_login(self, aluno):
+        _ativar_2fa(aluno)
+
+        resposta = self._revogar(Client())
+
+        assert resposta.status_code == 302
+        assert "/api/usuarios/entrar/" in resposta.url
+        assert TOTPDevice.objects.filter(user=aluno).exists()
+
+    def test_get_nao_revoga(self, cliente_aluno, aluno):
+        _ativar_2fa(aluno)
+
+        cliente_aluno.get(reverse("revogar_2fa"))
+
+        assert TOTPDevice.objects.filter(user=aluno).exists()
+
+    def test_revogar_grava_auditoria(self, cliente_aluno, aluno):
+        _ativar_2fa(aluno)
+
+        self._revogar(cliente_aluno)
+
+        assert RegistroAuditoria.objects.filter(
+            usuario=aluno,
+            acao="UPDATE",
+            modulo_afetado="Segurança/2FA",
+            descricao__contains="desativada",
+        ).exists()
+
+    def test_revogar_avisa_o_dono_da_conta_por_email(
+        self, cliente_aluno, aluno, mailoutbox
+    ):
+        _ativar_2fa(aluno)
+
+        self._revogar(cliente_aluno)
+
+        assert len(mailoutbox) == 1
+        assert mailoutbox[0].to == [aluno.email]
+        assert "dois fatores" in mailoutbox[0].body
+        assert Notificacao.objects.filter(usuario=aluno).count() == 1
+
+    def test_usuario_sem_2fa_nao_gera_auditoria_nem_email(
+        self, cliente_aluno, aluno, mailoutbox
+    ):
+        self._revogar(cliente_aluno)
+
+        assert not RegistroAuditoria.objects.filter(
+            usuario=aluno, descricao__contains="desativada"
+        ).exists()
+        assert len(mailoutbox) == 0
+        assert Notificacao.objects.count() == 0
+
+    def test_revogar_so_afeta_o_proprio_usuario(
+        self, cliente_aluno, aluno, outro_aluno
+    ):
+        _ativar_2fa(aluno)
+        _ativar_2fa(outro_aluno)
+
+        self._revogar(cliente_aluno)
+
+        assert not TOTPDevice.objects.filter(user=aluno).exists()
+        assert TOTPDevice.objects.filter(user=outro_aluno, confirmed=True).exists()
+
+    def test_ativacao_pendente_e_limpa_sem_avisar(
+        self, cliente_aluno, aluno, mailoutbox
+    ):
+        _ativar_2fa(aluno, confirmado=False)
+
+        self._revogar(cliente_aluno)
+
+        assert not TOTPDevice.objects.filter(user=aluno).exists()
+        assert len(mailoutbox) == 0
+
+    def test_perfil_mostra_a_confirmacao_depois_de_desativar(
+        self, cliente_aluno, aluno
+    ):
+        _ativar_2fa(aluno)
+
+        resposta = self._revogar(cliente_aluno, follow=True)
+
+        assert "Autenticação de dois fatores desativada." in resposta.content.decode()
+
+
+@pytest.mark.django_db
+class TestPaginaConfigurar2FA:
+    """A página vira painel de gerenciamento quando o 2FA já está ativo."""
+
+    def _abrir(self, cliente):
+        return cliente.get(reverse("configurar_2fa")).content.decode()
+
+    def test_com_2fa_ligado_mostra_o_botao_e_nao_mostra_o_qr_code(
+        self, cliente_aluno, aluno
+    ):
+        _ativar_2fa(aluno)
+
+        html = self._abrir(cliente_aluno)
+
+        assert "Desativar 2FA" in html
+        assert reverse("revogar_2fa") in html
+        assert "data:image/png;base64" not in html
+
+    def test_com_2fa_ligado_nao_cria_dispositivo_novo(self, cliente_aluno, aluno):
+        _ativar_2fa(aluno)
+
+        self._abrir(cliente_aluno)
+        self._abrir(cliente_aluno)
+
+        assert TOTPDevice.objects.filter(user=aluno).count() == 1
+
+    def test_com_2fa_desligado_mostra_o_qr_code_e_nao_o_botao(
+        self, cliente_aluno, aluno
+    ):
+        html = self._abrir(cliente_aluno)
+
+        assert "data:image/png;base64" in html
+        assert "Desativar 2FA" not in html
+        assert TOTPDevice.objects.filter(user=aluno, confirmed=False).count() == 1
+
+
+@pytest.mark.django_db
+class TestLoginObrigatorio:
+    """
+    Visitante sem login é mandado para a tela de login do projeto, nunca
+    para uma rota inexistente (exige LOGIN_URL no settings.py).
+    """
+
+    @pytest.mark.parametrize(
+        "nome_da_rota, metodo",
+        [
+            ("perfil", "get"),
+            ("configurar_2fa", "get"),
+            ("exportar_dados", "get"),
+            ("revogar_2fa", "post"),
+        ],
+    )
+    def test_visitante_vai_para_o_login(self, nome_da_rota, metodo):
+        resposta = getattr(Client(), metodo)(reverse(nome_da_rota))
+
+        assert resposta.status_code == 302
+        assert "/api/usuarios/entrar/" in resposta.url
+
+
+@pytest.mark.django_db
+class TestPerfil:
+    def _html(self, usuario):
+        return _cliente_logado(usuario).get(reverse("perfil")).content.decode()
+
+    def test_mostra_todos_os_dados_do_usuario(self):
+        usuario = _usuario_completo()
+
+        html = self._html(usuario)
+
+        assert "perfil_completo" in html
+        assert "Maria Silva" in html
+        assert "perfil_completo@exemplo.com" in html
+        assert "2026123" in html
+        assert "11999998888" in html
+        # O vínculo aparece por extenso, não como o código interno DOCENTE.
+        assert "Vínculo:</strong> Docente" in html
+
+    def test_campos_vazios_mostram_aviso(self):
+        usuario = Usuario.objects.create_user(
+            username="perfil_vazio", consentimento_dados=True
+        )
+
+        html = self._html(usuario)
+
+        assert "Não informado" in html
+        assert "Não informada" in html
+
+    def test_telefone_fica_criptografado_no_banco_mas_aparece_na_tela(self):
+        usuario = _usuario_completo()
+
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT telefone FROM usuarios_usuario WHERE id = %s", [usuario.id]
+            )
+            gravado_no_banco = cursor.fetchone()[0]
+
+        assert gravado_no_banco != "11999998888"
+        assert "11999998888" not in gravado_no_banco
+        assert "11999998888" in self._html(usuario)
+
+
+@pytest.mark.django_db
+class TestExportacaoDeDados:
+    """Portabilidade (LGPD 4.9): o JSON traz tudo o que o perfil mostra."""
+
+    def _exportar(self, usuario):
+        return _cliente_logado(usuario).get(reverse("exportar_dados"))
+
+    def test_exporta_todos_os_dados_do_perfil(self):
+        usuario = _usuario_completo()
+
+        resposta = self._exportar(usuario)
+        dados = resposta.json()
+
+        assert resposta.status_code == 200
+        assert dados["id_conta"] == usuario.id
+        assert dados["nome_de_usuario"] == "perfil_completo"
+        assert dados["nome_completo"] == "Maria Silva"
+        assert dados["nome"] == "Maria"
+        assert dados["sobrenome"] == "Silva"
+        assert dados["email"] == "perfil_completo@exemplo.com"
+        assert dados["matricula"] == "2026123"
+        assert dados["telefone"] == "11999998888"
+        assert dados["vinculo"] == "Docente"
+        assert dados["status_conta"] == "Ativa"
+        assert dados["consentimento_dados"] is True
+        assert dados["versao_documento_aceito"] == "v1.0"
+        assert dados["data_consentimento"] is not None
+
+    def test_baixa_como_arquivo(self):
+        usuario = _usuario_completo()
+
+        resposta = self._exportar(usuario)
+
+        assert "attachment" in resposta["Content-Disposition"]
+        assert "dados_pessoais_perfil_completo.json" in resposta["Content-Disposition"]
+
+    def test_so_exporta_os_dados_do_proprio_usuario(self):
+        dono = _usuario_completo("dono_dos_dados", matricula="111")
+        outro = _usuario_completo("outro_titular", matricula="222")
+
+        resposta = self._exportar(dono)
+
+        assert resposta.json()["email"] == dono.email
+        assert outro.email not in resposta.content.decode()
+        assert "outro_titular" not in resposta.content.decode()
+
+    def test_campos_vazios_saem_com_texto_padrao(self):
+        usuario = Usuario.objects.create_user(
+            username="exporta_vazio", consentimento_dados=True
+        )
+
+        dados = self._exportar(usuario).json()
+
+        assert dados["telefone"] == "Não informado"
+        assert dados["matricula"] == "Não registrada"
+
+    def test_arquivo_nao_vaza_a_senha(self):
+        usuario = Usuario.objects.create_user(
+            username="exporta_senha", password="senha12345", consentimento_dados=True
+        )
+
+        resposta = self._exportar(usuario)
+        conteudo = resposta.content.decode()
+
+        assert "password" not in resposta.json()
+        assert usuario.password not in conteudo
+        assert "senha12345" not in conteudo

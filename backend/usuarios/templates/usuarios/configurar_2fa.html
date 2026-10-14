@@ -17,22 +17,43 @@
         </div>
     {% endif %}
 
-    <div style="background-color: #f3f4f6; padding: 20px; border-radius: 8px; text-align: center; margin-bottom: 20px;">
-        <p><strong>1. Escaneie o QR Code abaixo:</strong></p>
-        <img src="data:image/png;base64,{{ qr_code }}" alt="QR Code 2FA" style="max-width: 250px; border: 10px solid white; border-radius: 8px;">
-    </div>
+    {% if ativo %}
 
-    <form method="POST" style="border: 1px solid #e5e7eb; padding: 20px; border-radius: 8px;">
-        {% csrf_token %}
-        <p><strong>2. Digite o código de 6 dígitos gerado para confirmar:</strong></p>
-        <div style="display: flex; gap: 10px; align-items: center;">
-            <input type="text" name="codigo" required placeholder="000000" maxlength="6" 
-                   style="padding: 10px; font-size: 18px; width: 120px; text-align: center; letter-spacing: 2px;">
-            <button type="submit" style="padding: 11px 20px; font-size: 16px; background-color: #2563eb; color: white; border: none; border-radius: 5px; cursor: pointer;">
-                Ativar Segurança
-            </button>
+        <div style="background-color: #dcfce7; color: #166534; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+            <p style="margin: 0;"><strong>&#10003; A autenticação de dois fatores está ativa na sua conta.</strong></p>
+            <p style="margin: 8px 0 0 0;">A cada login, além da senha, será pedido o código gerado pelo seu aplicativo autenticador.</p>
         </div>
-    </form>
+
+        <form method="POST" action="{% url 'revogar_2fa' %}"
+              onsubmit="return confirm('Desativar a autenticação de dois fatores? Sua conta passará a entrar só com a senha.');"
+              style="border: 1px solid #e5e7eb; padding: 20px; border-radius: 8px;">
+            {% csrf_token %}
+            <p style="margin-top: 0;"><strong>Desativar a autenticação de dois fatores</strong></p>
+            <p style="font-size: 14px; color: #4b5563;">
+                Sua conta ficará protegida apenas pela senha. Você poderá ativar de novo quando quiser.
+            </p>
+            <button type="submit" style="padding: 11px 20px; font-size: 16px; background-color: #dc2626; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                Desativar 2FA
+            </button>
+        </form>
+    {% else %}
+        <div style="background-color: #f3f4f6; padding: 20px; border-radius: 8px; text-align: center; margin-bottom: 20px;">
+            <p><strong>1. Escaneie o QR Code abaixo:</strong></p>
+            <img src="data:image/png;base64,{{ qr_code }}" alt="QR Code 2FA" style="max-width: 250px; border: 10px solid white; border-radius: 8px;">
+        </div>
+
+        <form method="POST" style="border: 1px solid #e5e7eb; padding: 20px; border-radius: 8px;">
+            {% csrf_token %}
+            <p><strong>2. Digite o código de 6 dígitos gerado para confirmar:</strong></p>
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <input type="text" name="codigo" required placeholder="000000" maxlength="6" 
+                       style="padding: 10px; font-size: 18px; width: 120px; text-align: center; letter-spacing: 2px;">
+                <button type="submit" style="padding: 11px 20px; font-size: 16px; background-color: #2563eb; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                    Ativar Segurança
+                </button>
+            </div>
+        </form>
+    {% endif %}
 
     <!-- Botão de Voltar ao Perfil -->
     <div style="margin-top: 20px; text-align: left;">

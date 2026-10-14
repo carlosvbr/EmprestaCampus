@@ -18,7 +18,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
-# Importação alterada para usar o módulo central de auditoria e remover LogAutenticacao
+from notificacoes.utils import notificar
 from auditoria.models import RegistroAuditoria
 from .models import TokenRecuperacaoSenha, Usuario
 from .serializers import RegistroSerializer
@@ -378,17 +378,29 @@ def encerrar_conta_view(request):
 
 @login_required
 def exportar_dados_view(request):
+    """
+    Portabilidade dos dados pessoais (LGPD 4.9): devolve um JSON com tudo o
+    que a página "Meu Perfil" mostra ao usuário, mais os dados da conta e da
+    trilha de consentimento. O arquivo é só do próprio titular (login_required
+    e request.user), nunca de outro usuário.
+    """
     usuario = request.user
 
     dados_pessoais = {
         "id_conta": usuario.id,
-        "usuario": usuario.username,
+        "nome_de_usuario": usuario.username,
+        "nome_completo": usuario.get_full_name(),
         "nome": usuario.first_name,
         "sobrenome": usuario.last_name,
         "email": usuario.email,
-        "matricula": getattr(usuario, 'matricula', 'Não registrada'),
+        "matricula": usuario.matricula or "Não registrada",
+        "telefone": usuario.telefone or "Não informado",
+        "vinculo": usuario.get_papel_display(),
         "data_criacao_conta": usuario.date_joined.strftime("%d/%m/%Y %H:%M:%S") if usuario.date_joined else None,
         "status_conta": "Ativa" if usuario.is_active else "Inativa",
+        "consentimento_dados": usuario.consentimento_dados,
+        "data_consentimento": usuario.data_consentimento.strftime("%d/%m/%Y %H:%M:%S") if usuario.data_consentimento else None,
+        "versao_documento_aceito": usuario.versao_documento_aceito,
     }
 
     response = JsonResponse(dados_pessoais, json_dumps_params={'ensure_ascii': False, 'indent': 4})
@@ -396,9 +408,12 @@ def exportar_dados_view(request):
 
     return response
 
-
 @login_required
 def configurar_2fa_view(request):
+
+    if TOTPDevice.objects.filter(user=request.user, confirmed=True).exists():
+        return render(request, 'usuarios/configurar_2fa.html', {'ativo': True})
+
     if request.method == 'POST':
         codigo = request.POST.get('codigo', '')
         device = TOTPDevice.objects.filter(user=request.user, confirmed=False).first()
@@ -436,6 +451,43 @@ def configurar_2fa_view(request):
 
     return render(request, 'usuarios/configurar_2fa.html', {'qr_code': qr_b64})
 
+@login_required(login_url='/api/usuarios/entrar/')
+def revogar_2fa_view(request):
+    """
+    Desativa a autenticação de dois fatores do usuário logado.
+
+    A ação deixa rastro na auditoria e o dono da conta é avisado por e-mail.
+    """
+    if request.method != 'POST':
+        return redirect('perfil')
+
+    ip = get_client_ip(request)
+    dispositivos = TOTPDevice.objects.filter(user=request.user)
+
+    if not dispositivos.filter(confirmed=True).exists():
+
+        dispositivos.delete()
+        messages.info(request, 'A autenticação de dois fatores não está ativa.')
+        return redirect('perfil')
+
+    dispositivos.delete()
+
+    RegistroAuditoria.objects.create(
+        usuario=request.user,
+        acao='UPDATE',
+        modulo_afetado='Segurança/2FA',
+        descricao='Autenticação de Dois Fatores (2FA) desativada pelo usuário.',
+        ip_origem=ip
+    )
+
+    notificar(
+        request.user,
+        'A autenticação de dois fatores da sua conta no EmprestaCampus foi desativada. '
+        'Se não foi você, entre em contato com o administrador e troque sua senha.'
+    )
+
+    messages.success(request, 'Autenticação de dois fatores desativada.')
+    return redirect('perfil')
 
 def reativar_conta_lgpd_view(request):
     user_id = request.session.get('usuario_inativo_id')

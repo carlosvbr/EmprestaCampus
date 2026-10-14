@@ -39,6 +39,7 @@ urlpatterns = [
     path('perfil/', views.perfil_view, name='perfil'),
     path('perfil/exportar/', views.exportar_dados_view, name='exportar_dados'),
     path('perfil/2fa/', views.configurar_2fa_view, name='configurar_2fa'),
+    path('perfil/2fa/revogar/', views.revogar_2fa_view, name='revogar_2fa'),
     path('perfil/revogar-consentimento/', views.revogar_consentimento_view, name='revogar_consentimento'),
     path('perfil/encerrar-conta/', views.encerrar_conta_view, name='encerrar_conta'),
     path('reativar-conta/', views.reativar_conta_lgpd_view, name='reativar_conta_lgpd'),

@@ -237,3 +237,5 @@ ENCRYPTION_KEY = env("ENCRYPTION_KEY")
 # excesso de tentativas (item 1.11). Sem isso, o Axes usa uma página
 # em texto puro, sem nenhum estilo do projeto.
 AXES_LOCKOUT_TEMPLATE = "usuarios/lockout.html"
+# Para onde o @login_required manda quem não está logado.
+LOGIN_URL = "/api/usuarios/entrar/"
