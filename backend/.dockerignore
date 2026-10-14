@@ -1,0 +1,10 @@
+# Segredos: nunca podem entrar na imagem.
+.env
+.env.*
+!.env.example
+
+# Lixo local
+__pycache__/
+*.pyc
+.pytest_cache/
+.git
