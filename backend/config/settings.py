@@ -154,8 +154,33 @@ SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(hours=1),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
 }
-EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
-DEFAULT_FROM_EMAIL = "naoresponda@empresta-campus.local"
+# E-mail Real
+SMTP_HOST = env("SMTP_HOST", default="")
+
+if SMTP_HOST:
+    MAILERS = {
+        "default": {
+            "BACKEND": "django.core.mail.backends.smtp.EmailBackend",
+            "OPTIONS": {
+                "host": SMTP_HOST,
+                "port": env("SMTP_PORT", default=587, cast=int),
+                "use_tls": env("SMTP_USE_TLS", default=True, cast=bool),
+                "username": env("SMTP_USER", default=""),
+                "password": env("SMTP_PASSWORD", default=""),
+                "timeout": 10,
+            },
+        },
+    }
+else:
+    MAILERS = {
+        "default": {
+            "BACKEND": "django.core.mail.backends.console.EmailBackend",
+            "OPTIONS": {},
+        },
+    }
+
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="naoresponda@empresta-campus.local")
+
 FRONTEND_URL = "http://localhost:5173"
 
 # Prazo padrão (em dias) para devolução de equipamentos, contado a

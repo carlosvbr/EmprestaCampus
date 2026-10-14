@@ -1,14 +1,16 @@
+import re
 from datetime import timedelta
 
 import pytest
 from django.conf import settings
+from django.test import Client
 from django.urls import reverse
 from django.utils import timezone
 
 from emprestimos.models import Emprestimo
 from notificacoes.models import Notificacao
 from notificacoes.utils import notificar, notificar_admins
-from usuarios.models import Usuario
+from usuarios.models import TokenRecuperacaoSenha, Usuario
 
 
 def _acao_admin(cliente, acao, emprestimo):
@@ -178,3 +180,67 @@ class TestEmailsDoFluxoDeEmprestimo:
         assert len(mailoutbox) == 1
         assert mailoutbox[0].to == [aluno.email]
         assert "devolução" in mailoutbox[0].body
+
+@pytest.mark.django_db
+class TestFalhaNoEnvioNaoQuebraNada:
+    def test_erro_de_smtp_e_registrado_e_a_notificacao_continua_gravada(
+        self, aluno, monkeypatch, caplog
+    ):
+        def smtp_fora_do_ar(*args, **kwargs):
+            raise OSError("SMTP fora do ar")
+
+        monkeypatch.setattr("notificacoes.utils.send_mail", smtp_fora_do_ar)
+
+        notificar(aluno, "Mensagem de teste.")
+
+        assert Notificacao.objects.filter(usuario=aluno).count() == 1
+        assert "SMTP fora do ar" in caplog.text
+
+
+@pytest.mark.django_db
+class TestRecuperacaoDeSenhaPorEmail:
+    URL_SOLICITAR = "/api/usuarios/recuperar-senha/"
+    URL_REDEFINIR = "/api/usuarios/redefinir-senha/"
+
+    def _solicitar(self, email):
+        return Client().post(
+            self.URL_SOLICITAR, {"email": email}, content_type="application/json"
+        )
+
+    def test_envia_o_link_por_email(self, aluno, mailoutbox):
+        resposta = self._solicitar(aluno.email)
+        token = TokenRecuperacaoSenha.objects.get(usuario=aluno)
+
+        assert resposta.status_code == 200
+        assert len(mailoutbox) == 1
+        assert mailoutbox[0].to == [aluno.email]
+        assert f"token={token.token}" in mailoutbox[0].body
+
+    def test_email_inexistente_responde_igual_e_nao_envia(self, db, mailoutbox):
+        resposta = self._solicitar("ninguem@exemplo.com")
+
+        assert resposta.status_code == 200
+        assert resposta.json()["detail"] == (
+            "Se o e-mail existir, um link de recuperação foi enviado."
+        )
+        assert len(mailoutbox) == 0
+        assert TokenRecuperacaoSenha.objects.count() == 0
+
+    def test_o_token_nao_fica_gravado_nas_notificacoes(self, aluno):
+        self._solicitar(aluno.email)
+
+        assert Notificacao.objects.count() == 0
+
+    def test_o_link_do_email_redefine_a_senha(self, aluno, mailoutbox):
+        self._solicitar(aluno.email)
+        token = re.search(r"token=([\w-]+)", mailoutbox[0].body).group(1)
+
+        resposta = Client().post(
+            self.URL_REDEFINIR,
+            {"token": token, "password": "NovaSenha123"},
+            content_type="application/json",
+        )
+        aluno.refresh_from_db()
+
+        assert resposta.status_code == 200
+        assert aluno.check_password("NovaSenha123")

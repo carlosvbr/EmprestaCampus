@@ -18,7 +18,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from notificacoes.utils import notificar
+from notificacoes.utils import enviar_email, notificar
 from auditoria.models import RegistroAuditoria
 from .models import TokenRecuperacaoSenha, Usuario
 from .serializers import RegistroSerializer
@@ -63,11 +63,14 @@ class SolicitarRecuperacaoSenhaView(APIView):
 
             caminho_base = reverse('redefinir_senha_web').lstrip('/')
             link = request.build_absolute_uri(f"/{caminho_base}?token={token.token}")
-
-            print("\n" + "="*70)
-            print("LINK DE RECUPERAÇÃO (LIMPO PARA ACESSO DIRETO):")
-            print(link)
-            print("="*70 + "\n")
+            enviar_email(
+                            usuario,
+                            'EmprestaCampus - Recuperação de senha',
+                            'Recebemos um pedido para redefinir a senha da sua conta.\n\n'
+                            f'Para escolher uma nova senha, acesse:\n{link}\n\n'
+                            'O link vale por 1 hora e só pode ser usado uma vez. '
+                            'Se não foi você, ignore este e-mail: sua senha continua a mesma.'
+                        )
 
         return Response(
             {"detail": "Se o e-mail existir, um link de recuperação foi enviado."},
