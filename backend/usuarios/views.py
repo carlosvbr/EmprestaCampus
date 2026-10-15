@@ -54,7 +54,11 @@ class SolicitarRecuperacaoSenhaView(APIView):
             usuario=usuario,
             acao='RECUPERACAO_SOLICITADA',
             modulo_afetado='Autenticação/Recuperação',
-            descricao=f'Solicitação de recuperação de senha. E-mail informado: {email}',
+            descricao=(
+                'Solicitação de recuperação de senha.'
+                if usuario else
+                'Solicitação de recuperação de senha para e-mail não cadastrado.'
+            ),
             ip_origem=ip
         )
 
@@ -215,7 +219,7 @@ def login_view(request):
                 usuario=usuario_obj,
                 acao='LOGIN_FALHA',
                 modulo_afetado='Autenticação',
-                descricao=f'Credenciais inválidas. Login tentado: {usuario_digitado}',
+                descricao='Credenciais inválidas.',
                 ip_origem=ip
             )
             messages.error(request, 'Credenciais inválidas. Verifique seu acesso e tente novamente.')
@@ -395,11 +399,15 @@ def encerrar_conta_view(request):
             ip_origem=ip
         )
 
+        TOTPDevice.objects.filter(user=usuario).delete()
+        TokenRecuperacaoSenha.objects.filter(usuario=usuario).delete()
+
         usuario.username = prefixo
         usuario.first_name = "Usuário"
         usuario.last_name = "Anonimizado"
         usuario.email = f"{prefixo}@emprestacampus.local"
         usuario.matricula = prefixo
+        usuario.telefone = None
 
         usuario.is_active = False
         usuario.set_unusable_password()
@@ -632,7 +640,7 @@ class LoginAPIView(APIView):
                 usuario=None,
                 acao='LOGIN_FALHA',
                 modulo_afetado='Autenticação/API',
-                descricao=f'Credenciais invalidas via API. Login tentado: {username}',
+                descricao='Credenciais invalidas via API.',
                 ip_origem=ip,
             )
             return Response({"detail": "Credenciais invalidas."}, status=status.HTTP_401_UNAUTHORIZED)
