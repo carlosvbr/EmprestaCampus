@@ -52,7 +52,7 @@ class SolicitarRecuperacaoSenhaView(APIView):
 
         RegistroAuditoria.objects.create(
             usuario=usuario,
-            acao='RECUPERACAO',
+            acao='RECUPERACAO_SOLICITADA',
             modulo_afetado='Autenticação/Recuperação',
             descricao=f'Solicitação de recuperação de senha. E-mail informado: {email}',
             ip_origem=ip
@@ -94,7 +94,7 @@ class RedefinirSenhaView(APIView):
         if not token:
             RegistroAuditoria.objects.create(
                 usuario=None,
-                acao='UPDATE',
+                acao='RECUPERACAO_FALHA',
                 modulo_afetado='Autenticação/Recuperação',
                 descricao='Falha na recuperação: Token inexistente.',
                 ip_origem=ip
@@ -105,7 +105,7 @@ class RedefinirSenhaView(APIView):
             motivo = "Token já utilizado" if token.usado else "Token expirado"
             RegistroAuditoria.objects.create(
                 usuario=token.usuario,
-                acao='UPDATE',
+                acao='RECUPERACAO_FALHA',
                 modulo_afetado='Autenticação/Recuperação',
                 descricao=f'Falha na recuperação: {motivo}.',
                 ip_origem=ip
@@ -115,7 +115,7 @@ class RedefinirSenhaView(APIView):
         if len(nova_senha) < 8:
             RegistroAuditoria.objects.create(
                 usuario=token.usuario,
-                acao='UPDATE',
+                acao='RECUPERACAO_FALHA',
                 modulo_afetado='Autenticação/Recuperação',
                 descricao='Falha na recuperação: Senha nova com menos de 8 caracteres.',
                 ip_origem=ip
@@ -128,12 +128,11 @@ class RedefinirSenhaView(APIView):
         token.usuario.set_password(nova_senha)
         token.usuario.save()
 
-        token.usado = True
-        token.save()
+        TokenRecuperacaoSenha.objects.filter(usuario=token.usuario, usado=False).update(usado=True)
 
         RegistroAuditoria.objects.create(
             usuario=token.usuario,
-            acao='RECUPERACAO',
+            acao='RECUPERACAO_SUCESSO',
             modulo_afetado='Autenticação/Recuperação',
             descricao='Senha redefinida com sucesso.',
             ip_origem=ip
