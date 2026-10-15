@@ -142,24 +142,58 @@ class RedefinirSenhaView(APIView):
         return Response({"detail": "Senha redefinida com sucesso."}, status=status.HTTP_200_OK)
 
 
+REATIVACAO_VALIDADE_SEGUNDOS = 300
+
+
+def pode_reativar(usuario):
+    """
+    Diz se a conta está suspensa SÓ porque o titular revogou o
+    consentimento, que é o único caso em que ele mesmo pode reativá-la.
+
+    - Revogou o consentimento: is_active=False e consentimento_dados=False.
+    - Desativada pelo administrador: is_active=False, mas o consentimento
+      continua True. Não pode se reativar sozinha (correção da falha F2).
+    - Anonimizada (encerrar conta): a senha vira inutilizável
+      (set_unusable_password), então nunca passa daqui.
+    """
+    return (
+        usuario is not None
+        and not usuario.is_active
+        and not usuario.consentimento_dados
+        and usuario.has_usable_password()
+    )
+
+
 def login_view(request):
     """
     Interface visual (Stateful) para autenticação de usuários via web.
+
+    Correção A1/F2: antes, a view procurava o usuário e mandava para a
+    tela de reativação ANTES de conferir a senha, então bastava saber o
+    username para reativar a conta de outra pessoa. Agora a senha é
+    sempre conferida primeiro, e a reativação só é oferecida a quem
+    provou ser o dono da conta.
     """
     if request.method == 'POST':
-        usuario_digitado = request.POST.get('username')
-        senha_digitada = request.POST.get('password')
+        usuario_digitado = request.POST.get('username', '')
+        senha_digitada = request.POST.get('password', '')
         ip = get_client_ip(request)
 
-        usuario_obj = Usuario.objects.filter(username=usuario_digitado).first() or \
-                      Usuario.objects.filter(email=usuario_digitado).first()
+        user = authenticate(request, username=usuario_digitado, password=senha_digitada)
 
-        if usuario_obj and (not usuario_obj.consentimento_dados or not usuario_obj.is_active):
+        usuario_obj = Usuario.objects.filter(username=usuario_digitado).first()
+
+        if (
+            user is None
+            and not getattr(request, 'axes_locked_out', False)
+            and pode_reativar(usuario_obj)
+            and usuario_obj.check_password(senha_digitada)
+        ):
+
             request.session['usuario_inativo_id'] = usuario_obj.id
+            request.session['reativacao_autorizada_em'] = timezone.now().timestamp()
             messages.error(request, "Sua conta está inativa devido à revogação do consentimento (LGPD).")
             return redirect('reativar_conta_lgpd')
-
-        user = authenticate(request, username=usuario_digitado, password=senha_digitada)
 
         if user is not None:
             tem_2fa = TOTPDevice.objects.filter(user=user, confirmed=True).exists()
@@ -493,15 +527,37 @@ def revogar_2fa_view(request):
     return redirect('perfil')
 
 def reativar_conta_lgpd_view(request):
+    """
+    Tela onde o titular que revogou o consentimento pode restaurá-lo.
+
+    Só é alcançável pelo login_view, depois da senha correta. Mesmo
+    assim, as condições são conferidas de novo aqui, porque o estado da
+    conta pode ter mudado entre o login e o POST (por exemplo, o admin
+    desativou a conta nesse meio-tempo).
+    """
     user_id = request.session.get('usuario_inativo_id')
+    autorizado_em = request.session.get('reativacao_autorizada_em')
     ip = get_client_ip(request)
 
-    if not user_id:
+    def negar():
+        # Limpa a autorização da sessão e manda de volta para o login.
+        request.session.pop('usuario_inativo_id', None)
+        request.session.pop('reativacao_autorizada_em', None)
         return redirect('login_web')
 
+    if not user_id or not autorizado_em:
+        return negar()
+
+    # Autorização vencida: a pessoa precisa provar a senha de novo.
+    if timezone.now().timestamp() - autorizado_em > REATIVACAO_VALIDADE_SEGUNDOS:
+        messages.error(request, "O tempo para reativar a conta expirou. Entre novamente.")
+        return negar()
+
     usuario = Usuario.objects.filter(id=user_id).first()
-    if not usuario:
-        return redirect('login_web')
+
+    # Conta desativada pelo admin, anonimizada ou já reativada.
+    if not pode_reativar(usuario):
+        return negar()
 
     if request.method == 'POST':
         usuario.consentimento_dados = True
@@ -518,7 +574,9 @@ def reativar_conta_lgpd_view(request):
             ip_origem=ip
         )
 
-        del request.session['usuario_inativo_id']
+        # A autorização é de uso único: some da sessão depois de usada.
+        request.session.pop('usuario_inativo_id', None)
+        request.session.pop('reativacao_autorizada_em', None)
         messages.success(request, "Consentimento restaurado e conta reativada com sucesso! Faça login novamente.")
         return redirect('login_web')
 
