@@ -4,20 +4,12 @@ from django.shortcuts import get_object_or_404, redirect, render
 from rest_framework import generics, permissions
 
 from auditoria.models import RegistroAuditoria
+from auditoria.utils import get_client_ip
 from inventario.models import Equipamento
 from notificacoes.utils import notificar_admins
 from .models import Emprestimo
 from .serializers import EmprestimoSerializer, SolicitarEmprestimoSerializer
 
-
-def get_client_ip(request):
-    # Mesma função repetida em usuarios/ e inventario/, mantendo o
-    # padrão de cada app ser independente (sem import cruzado só por
-    # causa dessa função auxiliar).
-    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-    if x_forwarded_for:
-        return x_forwarded_for.split(',')[0]
-    return request.META.get('REMOTE_ADDR')
 
 
 class SolicitarEmprestimoView(generics.CreateAPIView):

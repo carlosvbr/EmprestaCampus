@@ -219,7 +219,8 @@ AUTHENTICATION_BACKENDS = [
 
 AXES_FAILURE_LIMIT = 5
 AXES_COOLOFF_TIME = 0.5
-AXES_LOCKOUT_PARAMETERS = ["ip_address", "username"]
+AXES_LOCKOUT_PARAMETERS = [["ip_address", "username"]]
+AXES_CLIENT_IP_CALLABLE = "auditoria.utils.get_client_ip"
 
 # Cookies e headers seguros (item 3.3).
 #
