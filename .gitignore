@@ -4,6 +4,7 @@
 
 # Ambientes Virtuais
 venv/
+.venv/
 env/
 
 # Arquivos do Python e SQLite
