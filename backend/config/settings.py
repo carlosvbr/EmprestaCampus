@@ -186,6 +186,7 @@ FRONTEND_URL = "http://localhost:5173"
 # Prazo padrão (em dias) para devolução de equipamentos, contado a
 # partir da data de retirada (aprovação do empréstimo).
 PRAZO_PADRAO_EMPRESTIMO_DIAS = 7
+VERSAO_POLITICA_PRIVACIDADE = "v1.0"
 
 # Custo do PBKDF2 (hash de senha).
 #

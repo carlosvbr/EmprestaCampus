@@ -2,6 +2,7 @@ import secrets
 from datetime import timedelta
 
 from django.contrib.auth.models import AbstractUser, UserManager
+from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
@@ -85,7 +86,7 @@ class Usuario(AbstractUser):
         # Se o consentimento foi marcado como True e não tem data, registra a data exata agora
         if self.consentimento_dados and not self.data_consentimento:
             self.data_consentimento = timezone.now()
-            self.versao_documento_aceito = "v1.0" 
+            self.versao_documento_aceito = settings.VERSAO_POLITICA_PRIVACIDADE 
 
         # RBAC: o papel manda. is_staff (entrar no /admin/) e is_superuser
         # (ter todas as permissões lá dentro) acompanham o papel ADMIN, e

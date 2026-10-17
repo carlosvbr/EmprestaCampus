@@ -343,8 +343,6 @@ def revogar_consentimento_view(request):
 
         if usuario.consentimento_dados:
             usuario.consentimento_dados = False
-            usuario.data_consentimento = None
-            usuario.versao_documento_aceito = None
             usuario.is_active = False
             usuario.save()
 
@@ -362,7 +360,7 @@ def revogar_consentimento_view(request):
         else:
             usuario.consentimento_dados = True
             usuario.data_consentimento = timezone.now()
-            usuario.versao_documento_aceito = "v1.0"
+            usuario.versao_documento_aceito = settings.VERSAO_POLITICA_PRIVACIDADE
             usuario.is_active = True
             usuario.save()
 
@@ -595,7 +593,7 @@ def reativar_conta_lgpd_view(request):
     if request.method == 'POST':
         usuario.consentimento_dados = True
         usuario.data_consentimento = timezone.now()
-        usuario.versao_documento_aceito = "v1.0"
+        usuario.versao_documento_aceito = settings.VERSAO_POLITICA_PRIVACIDADE
         usuario.is_active = True
         usuario.save()
 
