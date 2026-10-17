@@ -83,7 +83,7 @@
                     <p class="text-xs text-gray-600 mb-3">
                         Status do Consentimento: 
                         {% if request.user.consentimento_dados %}
-                            <span class="text-green-600 font-semibold">Ativo (Versão: {{ request.user.versao_documento_aceito|default:"v1.0" }})</span>
+                          <span class="text-green-600 font-semibold">Ativo (Versão: {{ request.user.versao_documento_aceito|default:"v1.0" }}{% if request.user.data_consentimento %}, aceito em {{ request.user.data_consentimento|date:"d/m/Y H:i" }}{% endif %})</span>
                         {% else %}
                             <span class="text-red-600 font-semibold">Revogado</span>
                         {% endif %}

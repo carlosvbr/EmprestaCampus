@@ -424,7 +424,29 @@ def exportar_dados_view(request):
     trilha de consentimento. O arquivo é só do próprio titular (login_required
     e request.user), nunca de outro usuário.
     """
+    from emprestimos.models import Emprestimo
+
     usuario = request.user
+
+    def formatar(data):
+        return data.strftime("%d/%m/%Y %H:%M:%S") if data else None
+
+    emprestimos = [
+        {
+            "equipamento": emprestimo.equipamento.nome,
+            "patrimonio": emprestimo.equipamento.patrimonio,
+            "status": emprestimo.get_status_display(),
+            "data_solicitacao": formatar(emprestimo.data_solicitacao),
+            "data_retirada": formatar(emprestimo.data_retirada),
+            "data_devolucao_prevista": formatar(emprestimo.data_devolucao_prevista),
+            "data_devolucao_real": formatar(emprestimo.data_devolucao_real),
+            "prorrogacao_solicitada": emprestimo.prorrogacao_solicitada,
+            "observacoes": emprestimo.observacoes or "",
+        }
+        for emprestimo in Emprestimo.objects.filter(usuario=usuario)
+        .select_related('equipamento')
+        .order_by('-data_solicitacao')
+    ]
 
     dados_pessoais = {
         "id_conta": usuario.id,
@@ -436,11 +458,12 @@ def exportar_dados_view(request):
         "matricula": usuario.matricula or "Não registrada",
         "telefone": usuario.telefone or "Não informado",
         "vinculo": usuario.get_papel_display(),
-        "data_criacao_conta": usuario.date_joined.strftime("%d/%m/%Y %H:%M:%S") if usuario.date_joined else None,
+        "data_criacao_conta": formatar(usuario.date_joined),
         "status_conta": "Ativa" if usuario.is_active else "Inativa",
         "consentimento_dados": usuario.consentimento_dados,
-        "data_consentimento": usuario.data_consentimento.strftime("%d/%m/%Y %H:%M:%S") if usuario.data_consentimento else None,
+        "data_consentimento": formatar(usuario.data_consentimento),
         "versao_documento_aceito": usuario.versao_documento_aceito,
+        "emprestimos": emprestimos,
     }
 
     response = JsonResponse(dados_pessoais, json_dumps_params={'ensure_ascii': False, 'indent': 4})
