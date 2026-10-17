@@ -226,6 +226,8 @@ def home_view(request):
 
 
 def logout_view(request):
+    if request.method != 'POST':
+        return redirect('home')
     logout(request)
     return redirect('login_web')
 
@@ -472,6 +474,13 @@ def configurar_2fa_view(request):
             messages.success(request, 'Autenticação de Dois Fatores (2FA) ativada com sucesso!')
             return redirect('perfil')
         else:
+            RegistroAuditoria.objects.create(
+                usuario=request.user,
+                acao='UPDATE',
+                modulo_afetado='Segurança/2FA',
+                descricao='Falha: Código inválido na ativação do 2FA pela web.',
+                ip_origem=ip
+            )
             messages.error(request, 'Código inválido. Tente novamente.')
 
     TOTPDevice.objects.filter(user=request.user, confirmed=False).delete()
