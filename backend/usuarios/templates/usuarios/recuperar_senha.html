@@ -54,7 +54,7 @@
                 // O back-end sempre responde 200 por segurança contra enumeração de e-mails
                 if (response.ok) {
                     mensagemDiv.style.color = 'green';
-                    mensagemDiv.textContent = 'Se o e-mail existir no sistema, um link de recuperação foi enviado. Verifique seu terminal/console.';
+                    mensagemDiv.textContent = 'Se o e-mail existir no sistema, um link de recuperação foi enviado. Verifique sua caixa de entrada e Spam.';
                 } else {
                     mensagemDiv.style.color = 'red';
                     mensagemDiv.textContent = data.detail || 'Ocorreu um erro ao processar a solicitação.';
