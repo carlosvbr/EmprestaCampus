@@ -30,7 +30,6 @@ Desenvolver um sistema gerenciamento seguro do ciclo de empréstimo de equipamen
 - GitHub Projects
 - Docker
  
-## Arquitetura
  
 ## Arquitetura
 
