@@ -9,12 +9,12 @@ Esta documentação apresenta os principais recursos de segurança implementados
 - Cada senha recebe um **salt aleatório próprio**, então duas contas com a mesma senha geram hashes diferentes.
 - O banco guarda apenas o formato `pbkdf2_sha256$600000$<salt>$<hash>`. A senha original nunca é persistida.
 
-**Justificativa:** 600.000 iterações é o mínimo recomendado pela OWASP para PBKDF2-SHA256 (OWASP, Password Storage Cheat Sheet). O número fica fixado no código, em vez de depender do valor padrão da versão instalada do Django. O PBKDF2 foi preferido ao Argon2 por ser nativo do Django, não exigir dependência externa e ser aceito pela NIST SP 800-63B. O Argon2, por exigir muita memória, resiste melhor a ataques com GPU e é a evolução natural (ver seção 11).
+**Justificativa:** 600.000 iterações é o mínimo recomendado pela OWASP para PBKDF2-SHA256 (OWASP, Password Storage Cheat Sheet). O número fica fixado no código, em vez de depender do valor padrão da versão instalada do Django. O PBKDF2 foi preferido ao Argon2 por ser nativo do Django, não exigir dependência externa e ser aceito pela NIST SP 800-63B. O Argon2, por exigir muita memória, resiste melhor a ataques com GPU e é a evolução natural (ver Limitacoes.md).
 
 ## 2. Regras de senha
 
 - O cadastro (`RegistroSerializer`) e a redefinição de senha (`RedefinirSenhaView`) exigem **no mínimo 8 caracteres**.
-- O `settings.py` declara os validadores do Django em `AUTH_PASSWORD_VALIDATORS` (similaridade com dados do usuário, tamanho mínimo, senhas comuns e senhas só numéricas), mas **eles não são chamados pelas views**. Hoje uma senha como `12345678` é aceita. Essa é uma limitação conhecida (seção 11).
+- O `settings.py` declara os validadores do Django em `AUTH_PASSWORD_VALIDATORS` (similaridade com dados do usuário, tamanho mínimo, senhas comuns e senhas só numéricas), mas **eles não são chamados pelas views**. Hoje uma senha como `12345678` é aceita. Essa é uma limitação conhecida (ver Limitacoes.md).
 
 ## 3. Autenticação de dois fatores (2FA)
 
