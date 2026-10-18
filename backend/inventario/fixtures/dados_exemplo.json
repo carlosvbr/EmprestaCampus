@@ -1,0 +1,90 @@
+[
+{
+  "model": "inventario.categoria",
+  "pk": 1,
+  "fields": {
+    "nome": "Tablets",
+    "descricao": ""
+  }
+},
+{
+  "model": "inventario.categoria",
+  "pk": 2,
+  "fields": {
+    "nome": "Notebooks",
+    "descricao": ""
+  }
+},
+{
+  "model": "inventario.equipamento",
+  "pk": 1,
+  "fields": {
+    "nome": "Samsung Galaxy Tab  A11 01",
+    "patrimonio": "PAT-002",
+    "categoria": 1,
+    "status": "DISPONIVEL",
+    "data_cadastro": "2026-09-26T19:06:53.709Z",
+    "observacoes": ""
+  }
+},
+{
+  "model": "inventario.equipamento",
+  "pk": 2,
+  "fields": {
+    "nome": "Samsung Galaxy Tab  A11 02",
+    "patrimonio": "PAT-003",
+    "categoria": 1,
+    "status": "DISPONIVEL",
+    "data_cadastro": "2026-09-27T04:52:05.853Z",
+    "observacoes": ""
+  }
+},
+{
+  "model": "inventario.equipamento",
+  "pk": 3,
+  "fields": {
+    "nome": "Samsung Galaxy Tab  A11 03",
+    "patrimonio": "PAT-004",
+    "categoria": 1,
+    "status": "DISPONIVEL",
+    "data_cadastro": "2026-09-27T04:58:48.863Z",
+    "observacoes": ""
+  }
+},
+{
+  "model": "inventario.equipamento",
+  "pk": 4,
+  "fields": {
+    "nome": "Dell Latitude 3410 01",
+    "patrimonio": "PAT-001",
+    "categoria": 2,
+    "status": "DISPONIVEL",
+    "data_cadastro": "2026-09-27T16:20:01.224Z",
+    "observacoes": "Especificações técnicas:\r\n• Modelo: Dell Latitude 3410\r\n• Processador Intel® Core ™ 13-10110U (2.1GHz até 4.1GHz, cache de 4MB, dual-core, 10\" geração)\r\n• Sistema Operacional Windows 10 Pro, de 64 bits - em Português\r\nPPF 459.8-27\r\n(Brasil)\r\n• Memória de 8GB DDR4\r\n• Armazenamento SSD de 256GB PCle NVMe M.2 Classe 35\r\n• Tela HD de 14\"(1366 × 768), antirreflexo, câmera RGB e microfone, compatível com WLAN\r\n• Teclado sem retroiluminação com ponto único - em Português (padrão ABNT2)\r\n• Placa de rede Intel 6 AX201 802.11ax (160MHz, 2X2)+ Bluetooth 5.1\r\n• Bateria de 3 células e 40Whr, compatível com ExpressCharge\r\n• Placa de vídeo integrada Intel® UHD Graphics\r\n• Fonte Externa 65w"
+  }
+},
+{
+  "model": "inventario.equipamento",
+  "pk": 5,
+  "fields": {
+    "nome": "Dell Latitude 3410 02",
+    "patrimonio": "PAT-005",
+    "categoria": 2,
+    "status": "DISPONIVEL",
+    "data_cadastro": "2026-09-27T16:30:15.674Z",
+    "observacoes": "Especificações técnicas:\r\n• Modelo: Dell Latitude 3410\r\n• Processador Intel® Core ™ 13-10110U (2.1GHz até 4.1GHz, cache de 4MB, dual-core, 10\" geração)\r\n• Sistema Operacional Windows 10 Pro, de 64 bits - em Português\r\nPPF 459.8-27\r\n(Brasil)\r\n• Memória de 8GB DDR4\r\n• Armazenamento SSD de 256GB PCle NVMe M.2 Classe 35\r\n• Tela HD de 14\"(1366 × 768), antirreflexo, câmera RGB e microfone, compatível com WLAN\r\n• Teclado sem retroiluminação com ponto único - em Português (padrão ABNT2)\r\n• Placa de rede Intel 6 AX201 802.11ax (160MHz, 2X2)+ Bluetooth 5.1\r\n• Bateria de 3 células e 40Whr, compatível com ExpressCharge\r\n• Placa de vídeo integrada Intel® UHD Graphics\r\n• Fonte Externa 65w"
+  }
+},
+{
+  "model": "inventario.equipamento",
+  "pk": 6,
+  "fields": {
+    "nome": "Dell Latitude 3410 03",
+    "patrimonio": "PAT-006",
+    "categoria": 2,
+    "status": "DISPONIVEL",
+    "data_cadastro": "2026-09-27T16:31:01.145Z",
+    "observacoes": "Especificações técnicas:\r\n• Modelo: Dell Latitude 3410\r\n• Processador Intel® Core ™ 13-10110U (2.1GHz até 4.1GHz, cache de 4MB, dual-core, 10\" geração)\r\n• Sistema Operacional Windows 10 Pro, de 64 bits - em Português\r\nPPF 459.8-27\r\n(Brasil)\r\n• Memória de 8GB DDR4\r\n• Armazenamento SSD de 256GB PCle NVMe M.2 Classe 35\r\n• Tela HD de 14\"(1366 × 768), antirreflexo, câmera RGB e microfone, compatível com WLAN\r\n• Teclado sem retroiluminação com ponto único - em Português (padrão ABNT2)\r\n• Placa de rede Intel 6 AX201 802.11ax (160MHz, 2X2)+ Bluetooth 5.1\r\n• Bateria de 3 células e 40Whr, compatível com ExpressCharge\r\n• Placa de vídeo integrada Intel® UHD Graphics\r\n• Fonte Externa 65w"
+  }
+}
+]

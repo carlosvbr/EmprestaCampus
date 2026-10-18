@@ -158,6 +158,12 @@ docker compose exec backend python manage.py createsuperuser
 
 A conta criada recebe o papel de Administrador.
 
+O banco de dados começa vazio. Para carregar categorias e equipamentos de exemplo no catálogo:
+
+```bash
+docker compose exec backend python manage.py loaddata dados_exemplo
+```
+
 ### 6. Acessar o sistema
 
 | Página | Endereço |
