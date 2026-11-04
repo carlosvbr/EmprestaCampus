@@ -232,6 +232,12 @@ AXES_CLIENT_IP_CALLABLE = "auditoria.utils.get_client_ip"
 SESSION_COOKIE_SECURE = not DEBUG
 CSRF_COOKIE_SECURE = not DEBUG
 
+
+# O cookie csrftoken não precisa ser lido por JavaScript: os templates
+# enviam o token pelo campo oculto {% csrf_token %}. Marcá-lo como
+# HttpOnly reduz o impacto de um eventual XSS (achado 10010 do OWASP ZAP).
+CSRF_COOKIE_HTTPONLY = True
+
 # Impede que o navegador tente adivinhar o tipo de um arquivo diferente
 # do que o servidor declarou, evitando ataques de MIME sniffing.
 SECURE_CONTENT_TYPE_NOSNIFF = True
