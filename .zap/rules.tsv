@@ -1,0 +1,17 @@
+
+# OWASP ZAP - DAST EmprestaCampus
+# ID    ACTION    DESCRIPTION
+10010	WARN	Cookie No HttpOnly Flag
+10011	WARN	Cookie Without Secure Flag
+10012	WARN	Password Autocomplete in Browser
+10015	WARN	Incomplete Cache Control Header
+10016	WARN	Web Browser XSS Protection Not Enabled
+10019	WARN	Content Type Header Missing
+10020	WARN	X Frame Options Header Missing
+10021	WARN	X Content Type Options Header Missing
+10023	WARN	Information Disclosure Debug Error Messages
+10024	WARN	Sensitive Information in URL
+10025	WARN	Sensitive Information in HTTP Referrer
+10026	WARN	HTTP Parameter Override
+10027	WARN	Suspicious Comments
+10202	WARN	Absence of Anti CSRF Tokens
