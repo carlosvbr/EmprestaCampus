@@ -204,3 +204,9 @@ python manage.py migrate
 python manage.py runserver
 python -m pytest
 ```
+
+# Equipe de desenvolvimento
+
+Carlos Vinicius Borba Ribeiro - RGM: 11232501396
+André Quintino Aires Afonso - RGM: 11232102271
+Kauet Yudi Sugawara Brito - RGM: 11232100097
