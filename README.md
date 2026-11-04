@@ -4,7 +4,7 @@ Sistema web para gerenciamento de empréstimos de equipamentos acadêmicos, dese
  
 ## Escopo
  
-Desenvolver um sistema de gerenciamento seguro do ciclo de empréstimo de equipamentos acadêmicos, contemplando solicitação,reserva, aprovação, retirada, devolução, histórico, controle de acesso, notificações e auditoria das operações.
+Desenvolver um sistema de gerenciamento seguro do ciclo de empréstimo de equipamentos acadêmicos, contemplando solicitação, reserva, aprovação, retirada, devolução, histórico, controle de acesso, notificações e auditoria das operações.
  
 ## Stack Tecnológico
  
