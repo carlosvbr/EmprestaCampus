@@ -72,10 +72,11 @@ jobs:
             up --build -d
 
       - name: Backend 
+        run:       - name: Backend
         run: |
           for i in $(seq 1 60); do
-            if curl -fsS \
-              http://localhost:8000/api/usuarios/entrar/ \
+            if curl -kfsS \
+              https://localhost/api/usuarios/entrar/ \
               -o /dev/null; then
 
               echo "Backend disponivel"
@@ -99,7 +100,7 @@ jobs:
         if: github.event_name == 'push' || github.event_name == 'pull_request'
         uses: zaproxy/action-baseline@v0.15.0
         with:
-          target: "http://localhost:8000"
+          target: "https://localhost"
           rules_file_name: ".zap/rules.tsv"
           fail_action: false
           allow_issue_writing: false
@@ -109,7 +110,7 @@ jobs:
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         uses: zaproxy/action-full-scan@v0.13.0
         with:
-          target: "http://localhost:8000"
+          target: "https://localhost"
           rules_file_name: ".zap/rules.tsv"
           cmd_options: "-a -j"
           fail_action: true
