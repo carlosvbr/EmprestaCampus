@@ -72,7 +72,6 @@ jobs:
             up --build -d
 
       - name: Backend 
-        run:       - name: Backend
         run: |
           for i in $(seq 1 60); do
             if curl -kfsS \
