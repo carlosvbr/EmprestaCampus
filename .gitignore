@@ -13,3 +13,8 @@ __pycache__/
 db.sqlite3
 # Certificados TLS locais (gerados, nao sao codigo)
 nginx/certs/
+
+# Relatórios OWASP ZAP
+report_html.html
+report_json.json
+report_md.md
