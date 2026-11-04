@@ -1,0 +1,238 @@
+# =====================================================================
+# EmprestaCampus - DevSecOps Avançado
+#
+# Esteira 100% gratuita e open-source com três vertentes de segurança:
+#   1. DAST ............ OWASP ZAP (full scan) contra a aplicação rodando
+#                         em Docker no próprio runner (https://localhost)
+#   2. Privacidade ..... Bearer CLI (SAST com foco em PII / LGPD)
+#   3. Supply chain .... Trivy gera o SBOM CycloneDX da imagem do backend
+#
+# Bloqueio: ZAP e Bearer encerram com exit-code 1 quando encontram falhas
+# críticas, o que reprova o job e impede o merge do Pull Request.
+#
+# =====================================================================
+
+name: DevSecOps Avançado
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Privilégio mínimo: os jobs só precisam ler o código.
+permissions:
+  contents: read
+
+# Um novo push cancela a execução anterior do mesmo branch/PR.
+concurrency:
+  group: devsecops-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # -------------------------------------------------------------------
+  # 1) DAST - OWASP ZAP
+  # -------------------------------------------------------------------
+  dast-zap:
+    name: DAST - OWASP ZAP
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Segredos gerados na hora, válidos só durante esta execução.
+      # DEBUG=False para testar a aplicação com a configuração de
+      # produção (HTTPS obrigatório, HSTS, cookies Secure).
+      - name: Gerar .env efêmero
+        run: |
+          SECRET_KEY=$(openssl rand -hex 50)
+          ENCRYPTION_KEY=$(openssl rand -base64 32 | tr '+/' '-_')
+          POSTGRES_PASSWORD=$(openssl rand -hex 32)
+          cat > backend/.env <<EOF
+          SECRET_KEY=${SECRET_KEY}
+          ENCRYPTION_KEY=${ENCRYPTION_KEY}
+          DEBUG=False
+          ALLOWED_HOSTS=localhost,127.0.0.1
+          CSRF_TRUSTED_ORIGINS=https://localhost
+          POSTGRES_DB=empresta_campus
+          POSTGRES_USER=postgres
+          POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+          POSTGRES_HOST=db
+          POSTGRES_PORT=5432
+          SMTP_HOST=
+          SMTP_PORT=587
+          SMTP_USE_TLS=True
+          SMTP_USER=
+          SMTP_PASSWORD=
+          DEFAULT_FROM_EMAIL=teste@localhost
+          EOF
+
+      - name: Gerar certificado TLS autoassinado
+        run: |
+          mkdir -p nginx/certs
+          openssl req -x509 -nodes -newkey rsa:2048 -days 1 \
+            -keyout nginx/certs/localhost.key \
+            -out nginx/certs/localhost.crt \
+            -subj "/CN=localhost"
+
+      - name: Build e subida da aplicação (PostgreSQL + Django + Nginx)
+        run: docker compose up --build -d
+
+      - name: Aguardar a aplicação responder em HTTPS
+        run: |
+          for i in $(seq 1 60); do
+            if curl -kfsS https://localhost/api/usuarios/entrar/ -o /dev/null; then
+              echo "Aplicação disponível."
+              exit 0
+            fi
+            echo "Aguardando aplicação... ($i/60)"
+            sleep 5
+          done
+          echo "A aplicação não subiu a tempo."
+          docker compose logs --no-color
+          exit 1
+
+      # Full scan = spider + varredura passiva (cabeçalhos, cookies) +
+      # varredura ATIVA (XSS, SQL Injection, injeção de comandos, SSTI...).
+      #   -I  -> alertas WARN não reprovam; só as regras FAIL de .zap/rules.tsv
+      #   -m  -> minutos de spider
+      #   -z  -> limite de tempo da varredura ativa
+      # fail_action: true -> se houver FAIL, o job termina com exit-code 1.
+      - name: OWASP ZAP Full Scan
+        uses: zaproxy/action-full-scan@3c58388149901b9a03b7718852c5ba889646c27c # v0.13.0
+        with:
+          target: "https://localhost/"
+          rules_file_name: ".zap/rules.tsv"
+          cmd_options: '-I -m 3 -z "-config scanner.maxScanDurationInMins=20"'
+          fail_action: true
+          allow_issue_writing: false
+          artifact_name: "zap-full-scan-report"
+
+      - name: Logs da aplicação (em caso de falha)
+        if: failure()
+        run: docker compose logs --no-color
+
+      - name: Derrubar ambiente
+        if: always()
+        run: docker compose down -v --remove-orphans
+
+  # -------------------------------------------------------------------
+  # 2) Privacidade e dados sensíveis - Bearer
+  # -------------------------------------------------------------------
+  privacy-bearer:
+    name: Privacidade (LGPD) - Bearer
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Relatório de segurança/privacidade com BLOQUEIO (exit-code: 1).
+      # Bloqueia em critical, high e também medium: o Bearer classifica o
+      # vazamento de PII em logs (CWE-532, regra python_lang_logger) como
+      # medium, e para um sistema sujeito à LGPD isso é falha crítica.
+      # Achados low/warning aparecem no relatório, sem bloquear.
+      - name: Bearer - verificação de segurança e vazamento de PII (bloqueante)
+        uses: bearer/bearer-action@828eeb928ce2f4a7ca5ed57fb8b59508cb8c79bc # v2
+        with:
+          version: "2.1.3"
+          path: "."
+          skip-path: "docs"
+          severity: "critical,high,medium"
+          exit-code: 1
+
+      # Mesmo relatório em HTML, publicado como artefato para consulta.
+      # Roda mesmo se o passo anterior falhar (if: always()) e não bloqueia.
+      - name: Bearer - relatório HTML de segurança
+        if: always()
+        uses: bearer/bearer-action@828eeb928ce2f4a7ca5ed57fb8b59508cb8c79bc # v2
+        with:
+          version: "2.1.3"
+          path: "."
+          skip-path: "docs"
+          format: "html"
+          output: "bearer-relatorio-seguranca.html"
+          exit-code: 0
+
+      # Relatório de privacidade: inventário dos dados pessoais (PII) que o
+      # código manipula e onde, evidência do mapeamento exigido pela LGPD.
+      - name: Bearer - relatório de privacidade (inventário de PII)
+        if: always()
+        run: |
+          "$RUNNER_TEMP/bearer" scan . --report privacy --format csv \
+            --skip-path "docs" \
+            --output bearer-privacidade.csv --exit-code 0 --quiet
+
+      - name: Publicar relatórios do Bearer
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: bearer-relatorios
+          path: |
+            bearer-relatorio-seguranca.html
+            bearer-privacidade.csv
+          if-no-files-found: warn
+          retention-days: 30
+
+  # -------------------------------------------------------------------
+  # 3) Supply chain - SBOM com Trivy
+  # -------------------------------------------------------------------
+  sbom-trivy:
+    name: Supply Chain - SBOM (Trivy)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # O SBOM é gerado a partir da IMAGEM que seria entregue, e não só do
+      # requirements.txt: assim ele lista as versões exatas instaladas
+      # (Django, DRF, cryptography...) e também os pacotes do sistema
+      # operacional da imagem base python:3.14-slim.
+      - name: Build da imagem do backend
+        run: docker build -t emprestacampus-backend:${{ github.sha }} ./backend
+
+      - name: Trivy - gerar SBOM CycloneDX
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: "v0.76.1"
+          scan-type: image
+          image-ref: emprestacampus-backend:${{ github.sha }}
+          format: cyclonedx
+          output: sbom.json
+
+      - name: Resumo do SBOM
+        run: |
+          python3 - <<'EOF'
+          import json
+          bom = json.load(open("sbom.json"))
+          comps = bom.get("components", [])
+          print(f"Formato: {bom['bomFormat']} {bom['specVersion']}")
+          print(f"Componentes inventariados: {len(comps)}")
+          py = sorted((c["name"], c.get("version", "?")) for c in comps
+                      if "pkg:pypi/" in c.get("purl", ""))
+          print(f"Pacotes Python: {len(py)}")
+          for nome, versao in py:
+              print(f"  - {nome} {versao}")
+          if not comps:
+              raise SystemExit("SBOM vazio: nenhuma dependência encontrada.")
+          EOF
+
+      - name: Publicar SBOM como artefato
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sbom-cyclonedx
+          path: sbom.json
+          if-no-files-found: error
+          retention-days: 90
