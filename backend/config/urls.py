@@ -16,8 +16,13 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import include, path
+from django.views.generic import RedirectView
 
 urlpatterns = [
+    # Raiz do site leva para a tela de login (também serve de ponto de
+    # entrada para o spider do OWASP ZAP no pipeline de DAST).
+    path('', RedirectView.as_view(url='/api/usuarios/entrar/', permanent=False)),
+    path('admin/', admin.site.urls),
     path('admin/', admin.site.urls),
     path('api/usuarios/', include('usuarios.urls')),
     path('api/inventario/', include('inventario.urls')),

@@ -27,9 +27,11 @@ class FusoHorarioUsuarioMiddleware:
             if tz_name:
                 try:
                     timezone.activate(zoneinfo.ZoneInfo(tz_name))
-                except zoneinfo.ZoneInfoNotFoundError:
-                    # Cookie com valor inválido/corrompido: cai no
-                    # fuso padrão do servidor em vez de quebrar a página.
+                except (zoneinfo.ZoneInfoNotFoundError, ValueError):
+                    # Cookie com valor inválido/corrompido (inclusive
+                    # valores maliciosos como "../../etc/passwd", que o
+                    # zoneinfo rejeita com ValueError): cai no fuso padrão
+                    # do servidor em vez de quebrar a página com erro 500.
                     timezone.deactivate()
             else:
                 # Aluno ainda não tem o cookie (ex: primeiro acesso,
