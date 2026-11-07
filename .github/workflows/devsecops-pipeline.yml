@@ -1,0 +1,81 @@
+
+name: DevSecOps Pipeline
+
+on:
+  push:
+    branches:
+      - main
+
+  pull_request:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+
+  # ==========================================
+  # JOB 1 - SECRETS SCANNING
+  # ==========================================
+  secrets-scanning:
+    name: Secrets Scanning - TruffleHog
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Scan for exposed secrets
+        uses: trufflesecurity/trufflehog@v3
+        with:
+          extra_args: --results=verified,unknown --fail
+
+  # ==========================================
+  # JOB 2 - SOFTWARE COMPOSITION ANALYSIS (SCA)
+  # ==========================================
+  dependency-scanning:
+    name: SCA - Trivy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Scan dependencies for vulnerabilities
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln
+          format: table
+          exit-code: '1'
+          severity: HIGH,CRITICAL
+          ignore-unfixed: false
+
+  # ==========================================
+  # JOB 3 - STATIC APPLICATION SECURITY TESTING
+  # ==========================================
+  sast-scanning:
+    name: SAST - Semgrep
+    runs-on: ubuntu-latest
+
+    container:
+      image: semgrep/semgrep
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Semgrep security analysis
+        run: |
+          semgrep scan \
+            --config p/default \
+            --severity ERROR \
+            --error \
+            --metrics=off \
+            .
