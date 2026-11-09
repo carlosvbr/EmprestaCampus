@@ -174,19 +174,44 @@ jobs:
   sast-scanning:
     name: SAST - Semgrep
     runs-on: ubuntu-latest
-
-    container:
-      image: semgrep/semgrep
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write   # envia os achados para a aba Security > Code scanning
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
-      - name: Run Semgrep security analysis
+      # Relatório completo em SARIF (todas as severidades), publicado no
+      # painel de segurança do GitHub e como artefato. Não bloqueia.
+      - name: Semgrep - relatório SARIF (todas as severidades)
         run: |
-          semgrep scan \
-            --config p/default \
-            --severity ERROR \
-            --error \
-            --metrics=off \
-            .
+          docker run --rm -v "$PWD:/src" -w /src semgrep/semgrep:1.184.0 \
+            semgrep scan --config p/default --metrics=off \
+            --sarif-output=semgrep.sarif .
+
+      # BLOQUEANTE: só achados de severidade ERROR (alta) reprovam o job.
+      - name: Semgrep - achados de severidade ERROR (BLOQUEANTE)
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src semgrep/semgrep:1.184.0 \
+            semgrep scan --config p/default --metrics=off \
+            --severity ERROR --error .
+
+      - name: Enviar achados para o GitHub Code Scanning
+        if: always() && hashFiles('semgrep.sarif') != ''
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep
+
+      - name: Publicar relatório do Semgrep
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: semgrep-relatorio
+          path: semgrep.sarif
+          if-no-files-found: warn
+          retention-days: 30
