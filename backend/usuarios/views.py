@@ -84,7 +84,7 @@ class RedefinirSenhaView(APIView):
 
     def post(self, request):
         token_str = request.data.get("token", "")
-        nova_senha = request.data.get("password", "")
+        nova_senha = request.data.get("password")
         ip = get_client_ip(request)
 
         token = TokenRecuperacaoSenha.objects.filter(token=token_str).first()
@@ -110,7 +110,7 @@ class RedefinirSenhaView(APIView):
             )
             return Response({"detail": motivo + "."}, status=status.HTTP_400_BAD_REQUEST)
 
-        if len(nova_senha) < 8:
+        if not isinstance(nova_senha, str) or len(nova_senha) < 8:
             RegistroAuditoria.objects.create(
                 usuario=token.usuario,
                 acao='RECUPERACAO_FALHA',
