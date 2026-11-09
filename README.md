@@ -78,6 +78,32 @@ EmprestaCampus/
 └── README.md
 ```
 
+## Pipelines de segurança (GitHub Actions)
+
+A cada push ou Pull Request para a `main`, duas esteiras automatizadas verificam o projeto. Todas as ferramentas são gratuitas e open-source (o Bearer usa a Elastic License 2.0).
+
+### DevSecOps Pipeline (`.github/workflows/devsecops-pipeline.yml`)
+
+| Job | Ferramenta | O que verifica | Bloqueia quando |
+|---|---|---|---|
+| Secrets Scanning - TruffleHog | TruffleHog | Senhas, chaves e tokens no histórico do Git | Segredo verificado em qualquer commit, ou qualquer segredo (mesmo não verificado) em commits novos |
+| SCA - Trivy | Trivy | CVEs nas dependências da imagem Docker (Python e Debian) | Vulnerabilidade HIGH ou CRITICAL com correção disponível |
+| SAST - Semgrep | Semgrep OSS | Falhas de segurança no código-fonte | Achado de severidade ERROR |
+
+### DevSecOps Avançado (`.github/workflows/devsecops-avancado.yml`)
+
+| Job | Ferramenta | O que verifica | Bloqueia quando |
+|---|---|---|---|
+| DAST - OWASP ZAP | OWASP ZAP | Aplicação em execução (XSS, SQL Injection, cabeçalhos) | Regra marcada como `FAIL` em `.zap/rules.tsv` |
+| Privacidade (LGPD) - Bearer | Bearer CLI | Vazamento de dados pessoais no código | Achado critical, high ou medium |
+| Supply Chain - SBOM (Trivy) | Trivy | Gera o inventário de componentes (SBOM CycloneDX) | Não bloqueia; publica o `sbom.json` |
+
+### Proteção da branch `main`
+
+A `main` é protegida por um ruleset: alterações só entram por Pull Request, e o merge fica bloqueado até os jobs `Secrets Scanning - TruffleHog`, `SCA - Trivy` e `SAST - Semgrep` passarem. Os relatórios de cada execução ficam disponíveis como artefatos na aba **Actions**, e os achados do Semgrep aparecem em **Security > Code scanning**.
+
+Medidas de segurança das próprias esteiras: actions de terceiros fixadas pelo SHA do commit, binários das ferramentas verificados por SHA-256, permissão somente de leitura e segredos de teste gerados a cada execução.
+
 ## Como executar
 
 ### Pré-requisitos
