@@ -98,27 +98,75 @@ jobs:
           path: trufflehog-historico.json
           if-no-files-found: warn
           retention-days: 30
-  # ==========================================
-  # JOB 2 - SOFTWARE COMPOSITION ANALYSIS (SCA)
-  # ==========================================
+
+  # -------------------------------------------------------------------
+  # 2) SCA - Trivy
+  # -------------------------------------------------------------------
   dependency-scanning:
     name: SCA - Trivy
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Scan dependencies for vulnerabilities
-        uses: aquasecurity/trivy-action@v0.36.0
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          scan-type: fs
-          scan-ref: .
-          scanners: vuln
-          format: table
-          exit-code: '1'
-          severity: HIGH,CRITICAL
-          ignore-unfixed: false
+          persist-credentials: false
+
+      # A análise é feita na IMAGEM construída, e não no repositório: o
+      # requirements.txt não fixa versões (ex.: Django>=6.1), e nesse caso
+      # o Trivy não consegue saber qual versão será instalada e não
+      # analisa nada. A imagem contém as versões exatas que vão para
+      # produção, além dos pacotes do sistema operacional.
+      - name: Build da imagem do backend
+        run: docker build -t emprestacampus-backend:${{ github.sha }} ./backend
+
+      - name: Instalar Trivy (GitHub Releases + verificação SHA-256)
+        env:
+          TRIVY_VERSION: "0.76.1"
+        run: |
+          cd "$RUNNER_TEMP"
+          base="https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}"
+          tarball="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          curl -fsSLO "$base/$tarball"
+          curl -fsSLO "$base/trivy_${TRIVY_VERSION}_checksums.txt"
+          grep " ${tarball}$" "trivy_${TRIVY_VERSION}_checksums.txt" | sha256sum -c -
+          mkdir -p trivy-bin
+          tar -xzf "$tarball" -C trivy-bin trivy
+          echo "$RUNNER_TEMP/trivy-bin" >> "$GITHUB_PATH"
+          ./trivy-bin/trivy --version
+
+      # Relatório completo (todas as severidades, inclusive sem correção).
+      # Roda antes do bloqueio para que o relatório exista mesmo se o job
+      # falhar. Também baixa a base de vulnerabilidades usada a seguir.
+      - name: Relatório completo de vulnerabilidades (JSON)
+        run: |
+          trivy image emprestacampus-backend:${{ github.sha }} \
+            --scanners vuln \
+            --format json --output trivy-sca.json \
+            --exit-code 0
+
+      # BLOQUEANTE: CVEs de severidade ALTA ou CRÍTICA que já têm versão
+      # corrigida disponível. CVEs sem correção publicada ficam no
+      # relatório acima, porque não há atualização que as resolva.
+      - name: Vulnerabilidades HIGH/CRITICAL com correção (BLOQUEANTE)
+        run: |
+          trivy image emprestacampus-backend:${{ github.sha }} \
+            --scanners vuln \
+            --severity HIGH,CRITICAL \
+            --ignore-unfixed \
+            --skip-db-update \
+            --format table \
+            --exit-code 1
+
+      - name: Publicar relatório do Trivy
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: trivy-sca-relatorio
+          path: trivy-sca.json
+          if-no-files-found: warn
+          retention-days: 30
 
   # ==========================================
   # JOB 3 - STATIC APPLICATION SECURITY TESTING
