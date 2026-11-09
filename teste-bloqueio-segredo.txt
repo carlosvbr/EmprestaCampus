@@ -1,0 +1,2 @@
+Teste da esteira DevSecOps: credencial FALSA inserida de proposito.
+DATABASE_URL=postgres://admin:S3nhaProducao2026@db-producao.emprestacampus.local:5432/empresta_campus
