@@ -1,61 +1,172 @@
-
 name: DevSecOps Pipeline
 
 on:
   push:
-    branches:
-      - main
-
+    branches: [main]
   pull_request:
-    branches:
-      - main
-
+    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
 
-jobs:
+concurrency:
+  group: devsecops-pipeline-${{ github.ref }}
+  cancel-in-progress: true
 
-  # ==========================================
-  # JOB 1 - SECRETS SCANNING
-  # ==========================================
+jobs:
+  # -------------------------------------------------------------------
+  # 1) SECRETS SCANNING - TruffleHog
+  # -------------------------------------------------------------------
   secrets-scanning:
     name: Secrets Scanning - TruffleHog
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - name: Checkout (histórico completo)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
-      - name: Scan for exposed secrets
-        uses: trufflesecurity/trufflehog@v3
+      - name: Instalar TruffleHog (GitHub Releases + verificação SHA-256)
+        env:
+          TH_VERSION: "3.99.8"
+        run: |
+          cd "$RUNNER_TEMP"
+          base="https://github.com/trufflesecurity/trufflehog/releases/download/v${TH_VERSION}"
+          tarball="trufflehog_${TH_VERSION}_linux_amd64.tar.gz"
+          curl -fsSLO "$base/$tarball"
+          curl -fsSLO "$base/trufflehog_${TH_VERSION}_checksums.txt"
+          grep " ${tarball}$" "trufflehog_${TH_VERSION}_checksums.txt" | sha256sum -c -
+          mkdir -p th-bin
+          tar -xzf "$tarball" -C th-bin trufflehog
+          echo "$RUNNER_TEMP/th-bin" >> "$GITHUB_PATH"
+          ./th-bin/trufflehog --version
+
+      # BLOQUEANTE 1: todo o histórico do Git, todos os commits e branches.
+      # Falha se existir qualquer segredo VERIFICADO, isto é, uma
+      # credencial que o TruffleHog confirmou estar ativa (crítico).
+      - name: Histórico completo - segredos verificados (BLOQUEANTE)
+        run: |
+          trufflehog git file://. \
+            --results=verified \
+            --fail --no-update --github-actions
+
+      # BLOQUEANTE 2: somente os commits novos deste push/PR.
+      # Aqui o critério é mais rígido: falha também com segredos NÃO
+      # verificados (unknown), para que nenhuma credencial nova entre no
+      # repositório, mesmo que não seja possível testá-la.
+      - name: Commits novos - segredos verificados e não verificados (BLOQUEANTE)
+        if: github.event_name != 'workflow_dispatch'
+        env:
+          BASE_PR: ${{ github.event.pull_request.base.sha }}
+          HEAD_PR: ${{ github.event.pull_request.head.sha }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="$BASE_PR"; HEAD="$HEAD_PR"
+          else
+            BASE="$BEFORE"; HEAD="$AFTER"
+          fi
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+            echo "Sem commit base para comparar; histórico já coberto pelo passo anterior."
+            exit 0
+          fi
+          trufflehog git file://. \
+            --since-commit "$BASE" --branch "$HEAD" \
+            --results=verified,unknown \
+            --fail --no-update --github-actions
+
+      # Relatório (não bloqueia): todos os achados do histórico, inclusive
+      # os não verificados, para auditoria e para o relatório técnico.
+      - name: Relatório do histórico completo (JSON)
+        if: always()
+        run: |
+          trufflehog git file://. \
+            --results=verified,unknown \
+            --json --no-update > trufflehog-historico.json || true
+          echo "Achados no histórico (verificados + não verificados): $(grep -c '' trufflehog-historico.json || true)"
+
+      - name: Publicar relatório do TruffleHog
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          extra_args: --results=verified,unknown --fail
+          name: trufflehog-relatorio
+          path: trufflehog-historico.json
+          if-no-files-found: warn
+          retention-days: 30
 
-  # ==========================================
-  # JOB 2 - SOFTWARE COMPOSITION ANALYSIS (SCA)
-  # ==========================================
+  # -------------------------------------------------------------------
+  # 2) SCA - Trivy
+  # -------------------------------------------------------------------
   dependency-scanning:
     name: SCA - Trivy
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Scan dependencies for vulnerabilities
-        uses: aquasecurity/trivy-action@v0.36.0
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          scan-type: fs
-          scan-ref: .
-          scanners: vuln
-          format: table
-          exit-code: '1'
-          severity: HIGH,CRITICAL
-          ignore-unfixed: false
+          persist-credentials: false
+
+      # A análise é feita na IMAGEM construída, e não no repositório: o
+      # requirements.txt não fixa versões (ex.: Django>=6.1), e nesse caso
+      # o Trivy não consegue saber qual versão será instalada e não
+      # analisa nada. A imagem contém as versões exatas que vão para
+      # produção, além dos pacotes do sistema operacional.
+      - name: Build da imagem do backend
+        run: docker build -t emprestacampus-backend:${{ github.sha }} ./backend
+
+      - name: Instalar Trivy (GitHub Releases + verificação SHA-256)
+        env:
+          TRIVY_VERSION: "0.76.1"
+        run: |
+          cd "$RUNNER_TEMP"
+          base="https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}"
+          tarball="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          curl -fsSLO "$base/$tarball"
+          curl -fsSLO "$base/trivy_${TRIVY_VERSION}_checksums.txt"
+          grep " ${tarball}$" "trivy_${TRIVY_VERSION}_checksums.txt" | sha256sum -c -
+          mkdir -p trivy-bin
+          tar -xzf "$tarball" -C trivy-bin trivy
+          echo "$RUNNER_TEMP/trivy-bin" >> "$GITHUB_PATH"
+          ./trivy-bin/trivy --version
+
+      # Relatório completo (todas as severidades, inclusive sem correção).
+      # Roda antes do bloqueio para que o relatório exista mesmo se o job
+      # falhar. Também baixa a base de vulnerabilidades usada a seguir.
+      - name: Relatório completo de vulnerabilidades (JSON)
+        run: |
+          trivy image emprestacampus-backend:${{ github.sha }} \
+            --scanners vuln \
+            --format json --output trivy-sca.json \
+            --exit-code 0
+
+      # BLOQUEANTE: CVEs de severidade ALTA ou CRÍTICA que já têm versão
+      # corrigida disponível. CVEs sem correção publicada ficam no
+      # relatório acima, porque não há atualização que as resolva.
+      - name: Vulnerabilidades HIGH/CRITICAL com correção (BLOQUEANTE)
+        run: |
+          trivy image emprestacampus-backend:${{ github.sha }} \
+            --scanners vuln \
+            --severity HIGH,CRITICAL \
+            --ignore-unfixed \
+            --skip-db-update \
+            --format table \
+            --exit-code 1
+
+      - name: Publicar relatório do Trivy
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: trivy-sca-relatorio
+          path: trivy-sca.json
+          if-no-files-found: warn
+          retention-days: 30
 
   # ==========================================
   # JOB 3 - STATIC APPLICATION SECURITY TESTING
@@ -63,19 +174,44 @@ jobs:
   sast-scanning:
     name: SAST - Semgrep
     runs-on: ubuntu-latest
-
-    container:
-      image: semgrep/semgrep
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write   # envia os achados para a aba Security > Code scanning
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
-      - name: Run Semgrep security analysis
+      # Relatório completo em SARIF (todas as severidades), publicado no
+      # painel de segurança do GitHub e como artefato. Não bloqueia.
+      - name: Semgrep - relatório SARIF (todas as severidades)
         run: |
-          semgrep scan \
-            --config p/default \
-            --severity ERROR \
-            --error \
-            --metrics=off \
-            .
+          docker run --rm -v "$PWD:/src" -w /src semgrep/semgrep:1.184.0 \
+            semgrep scan --config p/default --metrics=off \
+            --sarif-output=semgrep.sarif .
+
+      # BLOQUEANTE: só achados de severidade ERROR (alta) reprovam o job.
+      - name: Semgrep - achados de severidade ERROR (BLOQUEANTE)
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src semgrep/semgrep:1.184.0 \
+            semgrep scan --config p/default --metrics=off \
+            --severity ERROR --error .
+
+      - name: Enviar achados para o GitHub Code Scanning
+        if: always() && hashFiles('semgrep.sarif') != ''
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep
+
+      - name: Publicar relatório do Semgrep
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: semgrep-relatorio
+          path: semgrep.sarif
+          if-no-files-found: warn
+          retention-days: 30
