@@ -238,6 +238,14 @@ AXES_COOLOFF_TIME = 0.5
 AXES_LOCKOUT_PARAMETERS = [["ip_address", "username"]]
 AXES_CLIENT_IP_CALLABLE = "auditoria.utils.get_client_ip"
 
+# Minimização: o django-axes, por padrão, grava cada
+# login bem-sucedido numa tabela própria (AccessLog), com IP e navegador
+# (user agent). O sistema já registra o login na auditoria
+# (LOGIN_SUCESSO, com IP), então essa segunda cópia não tem finalidade.
+# As tentativas que falharam (AccessAttempt) continuam sendo gravadas,
+# porque são elas que permitem o bloqueio contra força bruta.
+AXES_DISABLE_ACCESS_LOG = True
+
 # Cookies e headers seguros (item 3.3).
 #
 # *_SECURE = True: cookies só trafegam se a conexão for HTTPS. Em
