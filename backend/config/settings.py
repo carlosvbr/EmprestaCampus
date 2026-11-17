@@ -281,6 +281,22 @@ SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 # Usar chaves diferentes para propósitos diferentes limita o dano se
 # uma delas vazar.
 ENCRYPTION_KEY = env("ENCRYPTION_KEY")
+# Rotação de chaves.
+#
+# Para trocar a chave sem perder os dados já cifrados:
+#   1. a chave atual vai para ENCRYPTION_KEYS_ANTIGAS;
+#   2. uma chave nova vai para ENCRYPTION_KEY;
+#   3. roda-se "python manage.py rotacionar_chave_criptografia", que
+#      recifra tudo com a chave nova;
+#   4. a chave antiga é retirada de ENCRYPTION_KEYS_ANTIGAS.
+# Entre os passos 2 e 3, os dados antigos continuam legíveis, porque
+# o MultiFernet tenta a chave nova e depois cada chave antiga.
+# Várias chaves antigas são separadas por vírgula.
+ENCRYPTION_KEYS_ANTIGAS = [
+    chave.strip()
+    for chave in env("ENCRYPTION_KEYS_ANTIGAS", default="").split(",")
+    if chave.strip()
+]
 # Template customizado exibido quando o Axes bloqueia um login por
 # excesso de tentativas (item 1.11). Sem isso, o Axes usa uma página
 # em texto puro, sem nenhum estilo do projeto.

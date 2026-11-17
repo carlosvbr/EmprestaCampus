@@ -5,6 +5,8 @@ from django.contrib.auth.models import AbstractUser, UserManager
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
+from django_otp.models import Device, ThrottlingMixin, TimestampMixin
+from django_otp.plugins.otp_totp.models import TOTPDevice, default_key
 
 from .crypto import CampoCriptografado
 
@@ -139,3 +141,43 @@ class TokenRecuperacaoSenha(models.Model):
 
     def __str__(self):
         return f"Token de {self.usuario.username} (usado={self.usado})"
+
+
+
+
+class DispositivoTOTP(TimestampMixin, ThrottlingMixin, Device):
+    """
+    Dispositivo de 2FA (TOTP) com a chave secreta cifrada no banco.
+
+    O TOTPDevice do django-otp guarda a chave secreta em texto puro
+    (hexadecimal). Aqui a chave usa o mesmo CampoCriptografado do telefone,
+    com Fernet e rotação de chaves.
+
+    Só muda onde a chave fica guardada. Os demais campos são os mesmos
+    do TOTPDevice, e a verificação do código é reaproveitada dele, sem
+    reescrever a lógica já testada pela biblioteca: atraso progressivo
+    após erros (ThrottlingMixin) e proteção contra reuso do mesmo
+    código (last_t).
+    """
+
+    key = CampoCriptografado(
+        max_length=255,
+        default=default_key,
+        help_text="Chave secreta do TOTP, cifrada com Fernet.",
+    )
+    step = models.PositiveSmallIntegerField(default=30)
+    t0 = models.BigIntegerField(default=0)
+    digits = models.PositiveSmallIntegerField(choices=[(6, 6), (8, 8)], default=6)
+    tolerance = models.PositiveSmallIntegerField(default=1)
+    drift = models.SmallIntegerField(default=0)
+    last_t = models.BigIntegerField(default=-1)
+
+    class Meta(Device.Meta):
+        verbose_name = "dispositivo TOTP"
+        verbose_name_plural = "dispositivos TOTP"
+
+    bin_key = TOTPDevice.bin_key
+    verify_token = TOTPDevice.verify_token
+    get_throttle_factor = TOTPDevice.get_throttle_factor
+    config_url = TOTPDevice.config_url
+    _read_str_from_settings = TOTPDevice._read_str_from_settings

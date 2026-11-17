@@ -13,7 +13,12 @@ backend/
 └── usuarios/
     ├── crypto.py
     ├── hashers.py
-    └── models.py
+    ├── models.py
+    ├── tests_criptografia.py
+    ├── migrations/
+    │   └── 0011_migrar_dispositivos_totp.py
+    └── management/commands/
+        └── rotacionar_chave_criptografia.py
 
 nginx/
 └── nginx.conf
@@ -244,9 +249,45 @@ Em qualquer modo, o `nosniff` impede que o navegador interprete um arquivo com t
 
 ## Dados sensíveis criptografados em repouso
 
-Além de proteger os dados durante o tráfego, o EmprestaCampus também cifra dados pessoais armazenados no banco de dados. Atualmente, o campo cifrado é o **telefone** do usuário.
+Além de proteger os dados durante o tráfego, o EmprestaCampus também protege os dados sensíveis armazenados no banco. A proteção escolhida depende de o sistema precisar ou não recuperar o valor original.
 
-O arquivo responsável pelo modelo é `backend/usuarios/models.py`. No modelo `Usuario`, o telefone é definido utilizando a classe:
+### Inventário dos dados armazenados
+
+A tabela abaixo cobre **todos** os campos com dado pessoal ou segredo gravados pelo sistema, e mostra como cada um é protegido.
+
+| Dado | Onde fica | Proteção em repouso | Por quê |
+| --- | --- | --- | --- |
+| Senha | `Usuario.password` | Hash PBKDF2-SHA256, 600.000 iterações, salt próprio | O sistema só precisa comparar, nunca recuperar a senha |
+| Telefone | `Usuario.telefone` | **Cifrado com Fernet** (`CampoCriptografado`) | Dado de contato pessoal, que não é usado em buscas e precisa ser exibido ao dono |
+| Chave secreta do 2FA (TOTP) | `DispositivoTOTP.key` | **Cifrada com Fernet** (`CampoCriptografado`) | Com essa chave, qualquer pessoa geraria os códigos de 2FA do usuário |
+| Token de recuperação de senha | `TokenRecuperacaoSenha.token` | Texto aleatório de 256 bits (`secrets.token_urlsafe(32)`), válido por 1 hora e de uso único | Precisa ser buscado pelo valor exato; a validade curta e o uso único limitam o risco |
+| Nome, e-mail, usuário (login) e matrícula | `Usuario` | Não cifrados; protegidos pelo controle de acesso (papéis) e pela rede do banco | São usados no login, em buscas, na unicidade (`unique`) e na identificação do usuário nas telas. Um campo cifrado com Fernet gera um texto diferente a cada gravação e não pode ser buscado nem ter `unique` |
+| IP e usuário informado nos logs | `RegistroAuditoria`, tabelas do `django-axes` | Não cifrados; tabela de auditoria imutável (trigger) e acesso só para o administrador | São usados para investigar incidentes e bloquear força bruta, o que exige consulta por IP e por usuário |
+| Dados dos empréstimos e notificações | `Emprestimo`, `Notificacao` | Não cifrados; acesso filtrado por papel e por dono | Não são dados sensíveis no sentido do art. 5º, II, da LGPD; são a operação do sistema |
+
+Os campos cifrados são os que guardam um segredo (2FA) ou um dado de contato pessoal que não é usado em buscas (telefone). Os demais ficam em claro por necessidade de funcionamento, e a proteção deles vem do controle de acesso e do isolamento do banco: a porta do PostgreSQL só é publicada em `127.0.0.1`.
+
+### Como o campo cifrado funciona
+
+A classe `CampoCriptografado` está em `backend/usuarios/crypto.py`. Antes de gravar no banco, o valor é cifrado; ao ler, é decifrado:
+
+```python
+def get_prep_value(self, value):
+    if value is None or value == "":
+        return value
+    valor_cifrado = _fernet().encrypt(value.encode())
+    return valor_cifrado.decode()
+
+def from_db_value(self, value, expression, connection):
+    if value is None or value == "":
+        return value
+    valor_original = _fernet().decrypt(value.encode())
+    return valor_original.decode()
+```
+
+No banco, o valor aparece como um texto iniciado por `gAAAA...`, e não como o dado original. Como o Fernet usa um vetor de inicialização aleatório a cada cifragem, o mesmo valor gera um texto cifrado diferente a cada gravação.
+
+O telefone usa o campo no modelo `Usuario`:
 
 ```python
 telefone = CampoCriptografado(
@@ -257,33 +298,50 @@ telefone = CampoCriptografado(
 )
 ```
 
-A classe `CampoCriptografado` está implementada em `backend/usuarios/crypto.py` e utiliza o Fernet:
+### Chave secreta do 2FA
+
+O `TOTPDevice` padrão do `django-otp` guarda a chave secreta do 2FA em texto puro (hexadecimal). Quem lesse essa tabela, por um backup vazado ou uma injeção de SQL, conseguiria gerar os códigos de 2FA de qualquer usuário e anularia o segundo fator.
+
+Por isso o projeto usa o modelo próprio `DispositivoTOTP`, em `backend/usuarios/models.py`. Ele tem os mesmos campos do `TOTPDevice`, mas a chave usa o `CampoCriptografado`:
 
 ```python
-from cryptography.fernet import Fernet
+key = CampoCriptografado(
+    max_length=255,
+    default=default_key,
+    help_text="Chave secreta do TOTP, cifrada com Fernet (item 3.4).",
+)
 ```
 
-A chave é obtida através da configuração:
+A verificação do código é reaproveitada do `django-otp`, sem reescrever a lógica já testada pela biblioteca (atraso progressivo após erros e proteção contra reuso do mesmo código). Só muda onde a chave fica guardada.
+
+A migração `0011_migrar_dispositivos_totp` copia os dispositivos que já existiam para o novo modelo, com a chave cifrada, e apaga as linhas antigas da tabela do `django-otp`. Quem já tinha o 2FA configurado continua usando o mesmo aplicativo autenticador.
+
+### Rotação de chaves
+
+A função `_fernet()` monta um `MultiFernet` com a chave atual e as chaves antigas:
 
 ```python
-return Fernet(settings.ENCRYPTION_KEY.encode())
+chaves = [settings.ENCRYPTION_KEY, *settings.ENCRYPTION_KEYS_ANTIGAS]
+return MultiFernet([Fernet(chave.encode()) for chave in chaves])
 ```
 
-Quando o valor é preparado para ser armazenado no banco, ele é criptografado:
+O `MultiFernet` cifra sempre com a primeira chave (a atual) e, para decifrar, tenta cada chave da lista. Assim, a chave pode ser trocada sem perder os dados já gravados:
 
-```python
-valor_cifrado = _fernet().encrypt(value.encode())
-return valor_cifrado.decode()
-```
+1. A chave atual vai para `ENCRYPTION_KEYS_ANTIGAS`, e uma chave nova vai para `ENCRYPTION_KEY`. Os dados antigos continuam legíveis.
+2. O comando `python manage.py rotacionar_chave_criptografia` recifra todos os telefones e chaves de 2FA com a chave nova. Ele roda numa única transação: se algum valor não puder ser decifrado, nada é alterado.
+3. A chave antiga é retirada de `ENCRYPTION_KEYS_ANTIGAS`.
 
-Quando o valor é recuperado do banco, ocorre a descriptografia:
+A rotação é indicada periodicamente e, obrigatoriamente, sempre que houver suspeita de vazamento da chave.
 
-```python
-valor_original = _fernet().decrypt(value.encode())
-return valor_original.decode()
-```
+### Testes
 
-No banco, o telefone aparece como um texto iniciado por `gAAAA...`, e não como o número original. Como o Fernet usa um vetor de inicialização aleatório a cada cifragem, o mesmo telefone gera um texto cifrado diferente a cada gravação.
+Os testes de `backend/usuarios/tests_criptografia.py` leem o valor gravado direto no banco, por SQL puro, e comprovam que:
+
+- o telefone e a chave do 2FA ficam cifrados, e não em texto puro;
+- o 2FA continua funcionando com a chave cifrada;
+- o mesmo valor gera textos cifrados diferentes;
+- a migração tira as chaves de 2FA do texto puro sem invalidar o aplicativo autenticador;
+- depois da rotação, os dados só abrem com a chave nova, e sem a chave certa o dado não é lido.
 
 ------------------------------------------------------------------------
 
@@ -327,10 +385,10 @@ Para dados pessoais que precisam ser recuperados posteriormente, o projeto utili
 
 O Fernet é uma receita de **criptografia simétrica autenticada**: cifra os dados com **AES-128 em modo CBC** e garante a integridade com **HMAC-SHA256**. Se o texto cifrado for alterado no banco, a descriptografia falha em vez de devolver um valor adulterado.
 
-O mecanismo é inicializado utilizando a chave de criptografia:
+O mecanismo é inicializado com a chave atual e as chaves antigas, por meio do `MultiFernet` (ver "Rotação de chaves"):
 
 ```python
-Fernet(settings.ENCRYPTION_KEY.encode())
+MultiFernet([Fernet(chave.encode()) for chave in chaves])
 ```
 
 **Por que Fernet, e não AES-GCM diretamente:**
@@ -345,7 +403,7 @@ Para o volume e o tipo de dado do sistema (um campo curto por usuário), a facil
 A escolha dos mecanismos ocorre de acordo com a finalidade:
 
 -   **Senha:** hash PBKDF2-SHA256, pois a senha original não precisa ser recuperada;
--   **Telefone:** criptografia Fernet, pois o sistema precisa recuperar o valor original.
+-   **Telefone e chave do 2FA:** criptografia Fernet, pois o sistema precisa recuperar o valor original.
 
 ------------------------------------------------------------------------
 
@@ -373,6 +431,10 @@ A chave utilizada pelo Fernet é diferente da `SECRET_KEY` do Django. Essa separ
 ### ENCRYPTION_KEY
 
 É utilizada especificamente para criptografar os dados pessoais protegidos pelo Fernet. Deve ser uma chave Fernet válida (32 bytes codificados em base64).
+
+### ENCRYPTION_KEYS_ANTIGAS
+
+Opcional. Lista, separada por vírgulas, das chaves anteriores à `ENCRYPTION_KEY` atual. Só é usada durante a rotação, para decifrar os dados gravados antes da troca. Fica vazia no uso normal.
 
 ------------------------------------------------------------------------
 
@@ -407,7 +469,7 @@ A senha do banco de dados também vem do `.env` (`POSTGRES_PASSWORD`), e não fi
 | 3.1 TLS/HTTPS | Nginx com SSL/TLS na porta 443 | `nginx/nginx.conf` | Implementado |
 | 3.2 Bloqueio de conexões não seguras | Redirecionamento 301 de HTTP para HTTPS no Nginx; `SECURE_SSL_REDIRECT` no Django com `DEBUG=False` | `nginx/nginx.conf`, `settings.py` | Implementado |
 | 3.3 Evidência de tráfego cifrado | Configuração TLS e prints do acesso por HTTPS | `nginx/nginx.conf`, `docs/Evidencias/` | Parcial: configurado, sem captura do handshake TLS |
-| 3.4 Dados sensíveis em repouso | Telefone cifrado com Fernet | `usuarios/crypto.py`, `usuarios/models.py` | Implementado |
+| 3.4 Dados sensíveis em repouso | Inventário de todos os dados armazenados; telefone e chave do 2FA cifrados com Fernet; rotação de chaves com `MultiFernet` e comando de recifragem; testes por SQL puro | `usuarios/crypto.py`, `usuarios/models.py`, `usuarios/tests_criptografia.py` | Implementado |
 | 3.5 Algoritmo adequado | PBKDF2-SHA256 (600.000 iterações) para senhas; Fernet (AES-128-CBC + HMAC-SHA256) para dados pessoais | `usuarios/hashers.py`, `usuarios/crypto.py` | Implementado |
 | 3.6 Chaves protegidas | `SECRET_KEY` e `ENCRYPTION_KEY` separadas, lidas do `.env`; `.env` fora do Git e da imagem Docker | `settings.py`, `.gitignore`, `.dockerignore` | Implementado |
 | 3.7 Estratégia documentada | Este documento | `docs/criptografia.md` | Implementado |
@@ -421,7 +483,7 @@ O EmprestaCampus utiliza mecanismos distintos de segurança de acordo com a nece
 
 Para senhas, é utilizado **hash PBKDF2-SHA256 com 600.000 iterações e salt**, pois a aplicação não precisa recuperar a senha original.
 
-Para dados pessoais que precisam ser recuperados posteriormente, como o telefone, é utilizada **criptografia simétrica autenticada com Fernet** (AES-128-CBC com HMAC-SHA256).
+Para dados que precisam ser recuperados posteriormente, como o telefone e a chave secreta do 2FA, é utilizada **criptografia simétrica autenticada com Fernet** (AES-128-CBC com HMAC-SHA256), com rotação de chaves pelo `MultiFernet`.
 
 Na comunicação entre cliente e servidor, o sistema utiliza **HTTPS/TLS através do Nginx**, com redirecionamento obrigatório de HTTP para HTTPS e configurações adicionais de segurança no Django.
 
