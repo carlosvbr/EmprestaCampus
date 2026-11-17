@@ -52,3 +52,16 @@ def cliente_admin(administrador):
     cliente = Client()
     cliente.force_login(administrador, backend=BACKEND_SESSAO)
     return cliente
+
+
+
+@pytest.fixture(autouse=True)
+def limpar_cache_de_throttling():
+    """
+    O rate limiting do DRF guarda os contadores no cache. Limpar antes de
+    cada teste evita que requisições de um teste contem no limite de outro.
+    """
+    from django.core.cache import cache
+    cache.clear()
+    yield
+    cache.clear()
