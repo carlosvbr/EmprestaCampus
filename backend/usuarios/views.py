@@ -41,6 +41,8 @@ class SolicitarRecuperacaoSenhaView(APIView):
     """
     permission_classes = [permissions.AllowAny]
 
+    throttle_scope = "recuperacao_senha"
+
     def post(self, request):
         email = request.data.get("email", "")
         usuario = Usuario.objects.filter(email=email).first()
@@ -213,6 +215,7 @@ def login_view(request):
 
             if tem_2fa:
                 request.session['pre_2fa_user_id'] = user.id
+                request.session['pre_2fa_em'] = timezone.now().timestamp()
                 return redirect('validar_2fa_web')
 
             RegistroAuditoria.objects.create(
@@ -314,6 +317,13 @@ def validar_dois_fatores_view(request):
     if not user_id:
         return redirect('login_web')
 
+    inicio = request.session.get('pre_2fa_em')
+    if inicio is None or timezone.now().timestamp() - inicio > TOKEN_2FA_VALIDADE_SEGUNDOS:
+        request.session.pop('pre_2fa_user_id', None)
+        request.session.pop('pre_2fa_em', None)
+        messages.error(request, 'Sua verificação expirou. Entre novamente.')
+        return redirect('login_web')
+
     usuario = Usuario.objects.filter(id=user_id).first()
 
     if request.method == 'POST':
@@ -322,6 +332,7 @@ def validar_dois_fatores_view(request):
 
         if device and device.verify_token(codigo):
             del request.session['pre_2fa_user_id']
+            request.session.pop('pre_2fa_em', None)
             login(request, usuario, backend='django.contrib.auth.backends.ModelBackend')
 
             RegistroAuditoria.objects.create(
@@ -723,6 +734,8 @@ class VerificarDoisFatoresLoginView(APIView):
     """
 
     permission_classes = [permissions.AllowAny]
+
+    throttle_scope = "login_2fa"
 
     def post(self, request):
         token = request.data.get("token_2fa", "")
