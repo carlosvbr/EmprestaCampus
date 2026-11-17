@@ -74,7 +74,7 @@ class Migration(migrations.Migration):
                     "key",
                     usuarios.crypto.CampoCriptografado(
                         default=django_otp.plugins.otp_totp.models.default_key,
-                        help_text="Chave secreta do TOTP, cifrada com Fernet (item 3.4).",
+                        help_text="Chave secreta do TOTP, cifrada com Fernet.",
                         max_length=255,
                     ),
                 ),
