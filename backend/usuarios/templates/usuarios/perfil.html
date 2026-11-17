@@ -110,21 +110,10 @@
             </p>
             <form action="{% url 'atualizar_consentimentos' %}" method="POST">
                 {% csrf_token %}
-                <p class="text-sm text-gray-700 mb-3">
-                    <input type="checkbox" id="consentimento_avisos_email" name="consentimento_avisos_email" {% if consente_avisos_email %}checked{% endif %}>
-                    <label for="consentimento_avisos_email">Receber por e-mail avisos sobre o andamento dos meus empréstimos (aprovação, recusa, devolução e prorrogação).</label>
-                </p>
-                <p class="text-sm text-gray-700 mb-3">
-                    <input type="checkbox" id="consentimento_telefone" name="consentimento_telefone" {% if consente_telefone %}checked{% endif %}>
-                    <label for="consentimento_telefone">Guardar o meu telefone para contato da equipe sobre os meus empréstimos. Ao retirar esta autorização, o telefone é apagado.</label>
-                </p>
-                <p class="text-sm text-gray-700 mb-4">
-                    <label for="telefone">Telefone:</label>
-                    <input type="text" id="telefone" name="telefone" value="{{ request.user.telefone|default:'' }}" placeholder="(11) 99999-9999" class="border border-gray-200 rounded px-4 py-2 w-full">
-                </p>
-                <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition">
-                    Salvar Autorizações
-                </button>
+                <p class="text-sm text-gray-700 mb-3"><input type="checkbox" id="consentimento_avisos_email" name="consentimento_avisos_email" {% if consente_avisos_email %}checked{% endif %}> <label for="consentimento_avisos_email">Receber por e-mail avisos sobre o andamento dos meus empréstimos (aprovação, recusa, devolução e prorrogação).</label></p>
+                <p class="text-sm text-gray-700 mb-3"><input type="checkbox" id="consentimento_telefone" name="consentimento_telefone" {% if consente_telefone %}checked{% endif %}> <label for="consentimento_telefone">Guardar o meu telefone para contato da equipe sobre os meus empréstimos. Ao retirar esta autorização, o telefone é apagado.</label></p>
+                <p class="text-sm text-gray-700 mb-4"><label for="telefone">Telefone:</label> <input type="text" id="telefone" name="telefone" value="{{ request.user.telefone|default:'' }}" placeholder="(11) 99999-9999" class="border border-gray-200 rounded px-4 py-2 w-full"></p>
+                <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition">Salvar Autorizações</button>
             </form>
         </div>
 
