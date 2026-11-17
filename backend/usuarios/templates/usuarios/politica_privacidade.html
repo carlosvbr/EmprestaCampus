@@ -18,22 +18,27 @@
     <main class="container mx-auto p-8 max-w-4xl bg-white mt-8 rounded-lg shadow border border-gray-200">
         <h2 class="text-2xl font-bold mb-6 text-gray-800 border-b pb-2">Política de Privacidade e Transparência de Dados</h2>
         
-        <p class="mb-6 text-gray-700">Esta política descreve como o sistema <strong>EmprestaCampus</strong> realiza o tratamento dos seus dados pessoais, em estrita conformidade com a Lei Geral de Proteção de Dados (LGPD - Lei nº 13.709/2018). O tratamento tem como base legal o consentimento do titular (Art. 7º, I), registrado no momento do cadastro.</p>
+                <p class="mb-6 text-gray-700">Esta política descreve como o sistema <strong>EmprestaCampus</strong> realiza o tratamento dos seus dados pessoais, em estrita conformidade com a Lei Geral de Proteção de Dados (LGPD - Lei nº 13.709/2018). Cada uso dos seus dados tem uma base legal própria (Art. 7º): os dados necessários ao cadastro e aos empréstimos são tratados para a execução do serviço (Art. 7º, V); os registros de segurança, por legítimo interesse (Art. 7º, IX); e os usos opcionais, somente com o seu consentimento (Art. 7º, I), dado separadamente para cada um.</p>
 
         <h3 class="text-lg font-semibold text-blue-700 mt-6 mb-2">1. Dados Pessoais Coletados e Finalidade</h3>
         <ul class="list-disc pl-6 text-gray-700 space-y-2 mb-6">
             <li><strong>Nome e Sobrenome:</strong> Utilizados para a identificação do titular nas reservas e retiradas de equipamentos.</li>
             <li><strong>Nome de Usuário:</strong> Utilizado para o acesso ao sistema (login).</li>
             <li><strong>Senha:</strong> Utilizada para autenticar o titular. É armazenada apenas na forma de hash irreversível; a senha original nunca é guardada.</li>
-            <li><strong>E-mail Institucional:</strong> Utilizado para comunicações oficiais, notificações sobre os empréstimos, alertas de segurança e recuperação de senha.</li>
-            <li><strong>Telefone:</strong> Utilizado como contato alternativo da instituição com o titular sobre os equipamentos emprestados. As notificações automáticas do sistema são enviadas apenas por e-mail.</li>
+            <li><strong>E-mail Institucional:</strong> Utilizado para alertas de segurança da conta e recuperação de senha e, somente se você autorizar, para avisos sobre o andamento dos seus empréstimos.</li>
+            <li><strong>Telefone:</strong> Opcional. Guardado somente se você autorizar o contato da equipe por telefone sobre os seus empréstimos. Ao retirar a autorização, o telefone é apagado.</li>
             <li><strong>Matrícula (RA/SIAPE):</strong> Utilizada para vincular o titular à instituição e garantir a responsabilidade patrimonial sobre os itens emprestados.</li>
             <li><strong>Vínculo (Aluno, Docente):</strong> Utilizado para identificar a relação do titular com a instituição. As permissões de administração do sistema são atribuídas separadamente, apenas pela equipe responsável.</li>
             <li><strong>Histórico de Empréstimos:</strong> Equipamentos solicitados, situação e datas de solicitação, retirada e devolução. Utilizado para a gestão dos empréstimos e o controle patrimonial.</li>
-            <li><strong>Registro do Consentimento:</strong> Data e versão desta política aceitas pelo titular. Utilizado para comprovar o consentimento.</li>
-            <li><strong>Segredo da Autenticação em Dois Fatores (2FA):</strong> Coletado somente se o titular ativar o 2FA. Utilizado exclusivamente para validar os códigos do aplicativo autenticador.</li>
+            <li><strong>Registro do Consentimento:</strong> Data e versão desta política aceitas pelo titular e o histórico das autorizações opcionais (cada aceite e cada recusa, com data e versão). Utilizado para comprovar o consentimento.</li>
             <li><strong>Logs de Acesso e IP:</strong> Data, hora, ação realizada e endereço IP, coletados automaticamente para auditoria de segurança, prevenção a fraudes e rastreabilidade de ações no sistema.</li>
             <li><strong>Cookie de Fuso Horário:</strong> Cookie técnico com o fuso horário do navegador, utilizado apenas para exibir datas e horários no horário local do titular. Não é usado para rastreamento.</li>
+        </ul>
+
+        <p class="text-gray-700 mb-2"><strong>Usos opcionais (consentimento por finalidade):</strong> cada um é autorizado separadamente, no cadastro ou em "Meu Perfil → Minhas Autorizações", e pode ser retirado a qualquer momento, sem perder o acesso ao sistema. Recusar não impede o uso do EmprestaCampus.</p>
+        <ul class="list-disc pl-6 text-gray-700 space-y-2 mb-6">
+            <li><strong>Avisos por e-mail sobre os empréstimos:</strong> aprovação, recusa, devolução e prorrogação. Sem a autorização, esses avisos não são enviados; a situação dos empréstimos continua visível no sistema.</li>
+            <li><strong>Contato por telefone:</strong> o telefone só é guardado com a autorização e é apagado quando ela é retirada.</li>
         </ul>
 
         <h3 class="text-lg font-semibold text-blue-700 mt-6 mb-2">2. Princípio da Minimização de Dados</h3>
@@ -43,7 +48,7 @@
 
         <h3 class="text-lg font-semibold text-blue-700 mt-6 mb-2">3. Segurança e Compartilhamento dos Dados</h3>
         <ul class="list-disc pl-6 text-gray-700 space-y-2 mb-6">
-            <li><strong>Proteção técnica:</strong> A comunicação com o sistema é feita por conexão criptografada (HTTPS). O telefone é armazenado criptografado e a senha, apenas como hash (Art. 46 da LGPD).</li>
+            <li><strong>Proteção técnica:</strong> A comunicação com o sistema é feita por conexão criptografada (HTTPS). O telefone e o segredo do 2FA são armazenados criptografados, e a senha, apenas como hash (Art. 46 da LGPD).</li>
             <li><strong>Acesso restrito:</strong> Somente a equipe administradora do sistema tem acesso aos dados dos titulares, para a gestão dos empréstimos.</li>
             <li><strong>Compartilhamento:</strong> Os dados não são vendidos nem compartilhados com terceiros para outras finalidades. O endereço de e-mail é repassado apenas ao provedor de e-mail utilizado para entregar as mensagens do sistema.</li>
         </ul>
@@ -53,7 +58,7 @@
             Os titulares podem exercer seus direitos de forma automatizada:
         </p>
         <ul class="list-disc pl-6 text-gray-700 space-y-2 mb-6">
-            <li><strong>Autoatendimento:</strong> Através da aba "Meu Perfil", o usuário pode consultar ativamente seus dados (Art. 18, II), exportar um relatório estruturado JSON com seus dados cadastrais, o registro do consentimento e o histórico de empréstimos (Art. 18, V), revogar o consentimento (Art. 18, IX) e solicitar o encerramento da conta com anonimização irreversível dos dados (Art. 18, IV e VI).</li>
+            <li><strong>Autoatendimento:</strong> Através da aba "Meu Perfil", o usuário pode consultar ativamente seus dados (Art. 18, II), exportar um relatório estruturado JSON com seus dados cadastrais, o registro do consentimento e o histórico de empréstimos (Art. 18, V), autorizar ou retirar cada uso opcional dos dados em "Minhas Autorizações" (Art. 8º, § 5º), revogar o consentimento (Art. 18, IX) e solicitar o encerramento da conta com anonimização irreversível dos dados (Art. 18, IV e VI).</li>
             <li><strong>Revogação do consentimento:</strong> Ao revogar, o acesso ao sistema é suspenso imediatamente. Os dados permanecem armazenados enquanto a conta estiver suspensa, para permitir que o próprio titular reative a conta, o que exige a sua senha. Para a eliminação dos dados, deve ser utilizado o encerramento da conta.</li>
             <li><strong>Encerramento da conta:</strong> Nome, nome de usuário, e-mail, matrícula e telefone são substituídos por valores anônimos; a senha, o segredo do 2FA e os links de recuperação de senha são invalidados. A operação não pode ser desfeita.</li>
             <li><strong>Demais solicitações:</strong> A correção de dados (Art. 18, III) e qualquer outro pedido que não esteja disponível em "Meu Perfil" devem ser feitos pelo canal do encarregado (seção 6). A resposta completa é fornecida em até 15 dias (Art. 19, II).</li>
@@ -71,7 +76,7 @@
         </p>
         
         <div class="mt-8 pt-4 border-t border-gray-200 text-sm text-gray-500">
-            Última atualização: Outubro de 2026 | Versão do Documento: v1.0
+            Última atualização: Outubro de 2026 | Versão do Documento: v1.1
         </div>
     </main>
 
