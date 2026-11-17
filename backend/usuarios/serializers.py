@@ -1,4 +1,7 @@
-﻿from rest_framework import serializers
+﻿from django.contrib.auth import password_validation
+from django.core.exceptions import ValidationError as DjangoValidationError
+
+from rest_framework import serializers
 
 from .models import Usuario
 
@@ -60,6 +63,12 @@ class RegistroSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         senha = validated_data.pop("password")
         usuario = Usuario(**validated_data)
+        # Aplica as regras de settings.AUTH_PASSWORD_VALIDATORS (senha comum,
+        # só números, parecida com nome/e-mail/usuário) antes de gravar.
+        try:
+            password_validation.validate_password(senha, user=usuario)
+        except DjangoValidationError as erro:
+            raise serializers.ValidationError({"password": list(erro.messages)})
         usuario.set_password(senha)
         usuario.save() # Dispara a lógica automática do models.py para registrar data e versão do aceite
         return usuario
