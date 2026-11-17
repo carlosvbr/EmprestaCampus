@@ -7,7 +7,7 @@
 
 ## 1. Objetivo
 
-Este documento associa **cada campo** gravado pelo sistema que se refere a uma pessoa a uma **finalidades**, a uma **base legal** da LGPD (art. 7º) e a um **prazo de retenção**. Também registra as decisões de **minimização**: o que o sistema deixou de coletar ou de guardar e por quê.
+Este documento associa **cada campo** gravado pelo sistema que se refere a uma pessoa a uma ou mais **finalidades**, a uma **base legal** da LGPD (art. 7º) e a um **prazo de retenção**. Também registra as decisões de **minimização**: o que o sistema deixou de coletar ou de guardar e por quê.
 
 O mapeamento não existe só neste documento. Ele está no código, em `usuarios/lgpd.py`, e um teste automatizado compara esse mapeamento com os campos reais do banco (seção 6). Se alguém criar um campo novo sem classificá-lo, o teste falha e a mudança não entra na `main`.
 
