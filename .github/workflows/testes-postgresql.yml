@@ -1,0 +1,117 @@
+# Testes automatizados contra PostgreSQL
+#
+# Roda a suíte completa (pytest) a cada push e Pull Request, contra um
+# PostgreSQL real, com todas as migrações aplicadas. 
+# Publica como artefato:
+#   - ambiente.txt ........ versões de Python, PostgreSQL e pacotes
+#   - resultado-testes.txt  saída completa do pytest
+#   - junit.xml ........... resultado por teste (formato JUnit)
+# Assim, os resultados dos testes de segurança ficam reproduzíveis e
+# datados a cada execução.
+
+name: Testes automatizados
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: testes-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  testes:
+    name: Testes - pytest (PostgreSQL)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: empresta_campus
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres_ci_somente_teste
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Python 3.14
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.14"
+
+      - name: Instalar dependências (versões fixadas)
+        run: pip install --no-cache-dir -r backend/requirements.txt
+
+      # Segredos gerados na hora, válidos só durante esta execução.
+      - name: Gerar .env efêmero
+        run: |
+          cat > backend/.env <<EOF
+          SECRET_KEY=$(openssl rand -hex 50)
+          ENCRYPTION_KEY=$(openssl rand -base64 32 | tr '+/' '-_')
+          DEBUG=True
+          ALLOWED_HOSTS=localhost,127.0.0.1
+          CSRF_TRUSTED_ORIGINS=https://localhost
+          POSTGRES_DB=empresta_campus
+          POSTGRES_USER=postgres
+          POSTGRES_PASSWORD=postgres_ci_somente_teste
+          POSTGRES_HOST=localhost
+          POSTGRES_PORT=5432
+          SMTP_HOST=
+          SMTP_PORT=587
+          SMTP_USE_TLS=True
+          SMTP_USER=
+          SMTP_PASSWORD=
+          DEFAULT_FROM_EMAIL=teste@localhost
+          EOF
+
+      - name: Registrar ambiente da execução
+        working-directory: backend
+        env:
+          PGPASSWORD: postgres_ci_somente_teste
+        run: |
+          {
+            echo "Data (UTC): $(date -u '+%Y-%m-%d %H:%M:%S')"
+            echo "Commit: ${GITHUB_SHA}"
+            echo "Runner: $(lsb_release -ds 2>/dev/null || uname -a)"
+            echo "Python: $(python --version)"
+            echo "PostgreSQL: $(psql -h localhost -U postgres -tAc 'SELECT version();')"
+            echo
+            echo "Pacotes instalados:"
+            pip freeze
+          } | tee ambiente.txt
+
+      - name: Executar a suíte de testes
+        working-directory: backend
+        run: |
+          set -o pipefail
+          python -m pytest -v -p no:cacheprovider --junitxml=junit.xml 2>&1 | tee resultado-testes.txt
+
+      - name: Publicar resultados
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: resultado-testes
+          path: |
+            backend/ambiente.txt
+            backend/resultado-testes.txt
+            backend/junit.xml
+          if-no-files-found: warn
+          retention-days: 90
