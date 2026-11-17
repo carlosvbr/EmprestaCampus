@@ -5,7 +5,7 @@ from django.conf import settings
 from django.test import Client
 
 from auditoria.models import RegistroAuditoria
-from usuarios.lgpd import CAMPOS_TECNICOS, FINALIDADES, MAPEAMENTO
+from usuarios.lgpd import CAMPOS_TECNICOS, FINALIDADES, MAPEAMENTO, finalidades_do_campo
 from usuarios.models import Usuario
 
 URL_REGISTRO = "/api/usuarios/registro/"
@@ -56,7 +56,12 @@ class TestMapeamentoDosDados:
                 assert rotulo in MAPEAMENTO, f"{rotulo} guarda dado de usuário e não está mapeado"
 
     def test_toda_finalidade_usada_existe_e_tem_base_legal(self):
-        usadas = {f for campos in MAPEAMENTO.values() for f in campos.values()}
+        usadas = {
+            finalidade
+            for campos in MAPEAMENTO.values()
+            for valor in campos.values()
+            for finalidade in finalidades_do_campo(valor)
+        }
         assert usadas == set(FINALIDADES)
         for finalidade in FINALIDADES.values():
             assert "art. 7º" in finalidade["base_legal"]

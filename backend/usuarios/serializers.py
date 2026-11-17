@@ -3,7 +3,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 
 from rest_framework import serializers
 
-from .models import Usuario
+from .models import Finalidade, Usuario
 
 # Papéis que o próprio usuário pode escolher ao se cadastrar.
 # ADMIN fica de fora de propósito: ele concede poderes administrativos
@@ -34,9 +34,28 @@ class RegistroSerializer(serializers.ModelSerializer):
         error_messages={'required': 'O consentimento dos dados é obrigatório.'}
     )
 
+    # --- LGPD: consentimento por finalidade ---
+    # Finalidades opcionais, cada uma com a sua própria caixa, desmarcada
+    # por padrão. Recusar não impede o cadastro.
+    consentimento_telefone = serializers.BooleanField(required=False, default=False, write_only=True)
+    consentimento_avisos_email = serializers.BooleanField(required=False, default=False, write_only=True)
+
     class Meta:
         model = Usuario
-        fields = ["id","username","first_name","last_name","email","password","papel","matricula","telefone","consentimento_dados"]
+        fields = [
+            "id", "username", "first_name", "last_name", "email", "password", "papel",
+            "matricula", "telefone", "consentimento_dados",
+            "consentimento_telefone", "consentimento_avisos_email",
+        ]
+
+    def validate(self, dados):
+        """O telefone só pode ser guardado com o consentimento para essa finalidade."""
+        if dados.get("telefone") and not dados.get("consentimento_telefone"):
+            raise serializers.ValidationError({
+                "telefone": "Para informar o telefone, autorize o contato por telefone. "
+                            "Se preferir, deixe o campo em branco."
+            })
+        return dados
 
     def validate_papel(self, value):
         """
@@ -62,6 +81,8 @@ class RegistroSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         senha = validated_data.pop("password")
+        aceita_telefone = validated_data.pop("consentimento_telefone")
+        aceita_avisos = validated_data.pop("consentimento_avisos_email")
         usuario = Usuario(**validated_data)
         # Aplica as regras de settings.AUTH_PASSWORD_VALIDATORS (senha comum,
         # só números, parecida com nome/e-mail/usuário) antes de gravar.
@@ -71,4 +92,9 @@ class RegistroSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({"password": list(erro.messages)})
         usuario.set_password(senha)
         usuario.save() # Dispara a lógica automática do models.py para registrar data e versão do aceite
+
+        # Registra as duas escolhas, inclusive a recusa: fica provado que o
+        # titular decidiu cada finalidade separadamente.
+        usuario.definir_consentimento(Finalidade.CONTATO_TELEFONE, aceita_telefone)
+        usuario.definir_consentimento(Finalidade.AVISOS_EMAIL, aceita_avisos)
         return usuario

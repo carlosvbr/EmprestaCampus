@@ -2,7 +2,9 @@
 Mapeamento dos dados pessoais tratados pelo sistema.
 
 Cada campo gravado no banco que se refere a uma pessoa está associado a
-uma finalidade, e cada finalidade a uma base legal do art. 7º da LGPD.
+uma ou mais finalidades, e cada finalidade a uma base legal do art. 7º da
+LGPD. As finalidades com base em consentimento são opcionais e têm aceite
+próprio.
 Os campos puramente técnicos, que não identificam nem descrevem ninguém,
 ficam listados à parte, para que nenhum campo fique sem classificação.
 
@@ -24,12 +26,16 @@ FINALIDADES = {
         "base_legal": "Execução de contrato (art. 7º, V)",
     },
     "comunicacao": {
-        "descricao": "Avisar o titular sobre seus empréstimos e sobre a segurança da conta",
+        "descricao": "Avisar o titular sobre a segurança da conta e permitir a recuperação de senha",
         "base_legal": "Execução de contrato (art. 7º, V)",
+    },
+    "avisos_emprestimo": {
+        "descricao": "Avisar por e-mail sobre o andamento dos empréstimos (aprovação, recusa, devolução, prorrogação)",
+        "base_legal": "Consentimento (art. 7º, I); opcional",
     },
     "contato_alternativo": {
         "descricao": "Contato da equipe com o titular, por telefone, sobre um equipamento emprestado",
-        "base_legal": "Consentimento (art. 7º, I); campo opcional",
+        "base_legal": "Consentimento (art. 7º, I); opcional",
     },
     "consentimento": {
         "descricao": "Comprovar quando e qual versão da política o titular aceitou",
@@ -41,14 +47,14 @@ FINALIDADES = {
     },
 }
 
-# Campos com dado pessoal: {modelo: {campo: finalidade}}
+# Campos com dado pessoal: {modelo: {campo: finalidade ou (finalidades, ...)}}
 MAPEAMENTO = {
     "usuarios.Usuario": {
         "username": "acesso",
         "password": "acesso",
         "first_name": "acesso",
         "last_name": "acesso",
-        "email": "comunicacao",
+                "email": ("comunicacao", "avisos_emprestimo"),
         "matricula": "emprestimo",
         "papel": "acesso",
         "telefone": "contato_alternativo",
@@ -87,12 +93,21 @@ MAPEAMENTO = {
         "observacoes": "emprestimo",
         "prorrogacao_solicitada": "emprestimo",
     },
+    "usuarios.ConsentimentoFinalidade": {
+        "usuario": "consentimento",
+        "finalidade": "consentimento",
+        "aceito": "consentimento",
+        "data_hora": "consentimento",
+        "versao_politica": "consentimento",
+    },
     "notificacoes.Notificacao": {
-        "usuario": "comunicacao",
-        "mensagem": "comunicacao",
-        "tipo": "comunicacao",
-        "lida": "comunicacao",
-        "data_criacao": "comunicacao",
+        # Guarda tanto avisos de segurança quanto avisos de empréstimo;
+        # estes só são gravados com o consentimento do titular.
+        "usuario": ("comunicacao", "avisos_emprestimo"),
+        "mensagem": ("comunicacao", "avisos_emprestimo"),
+        "tipo": ("comunicacao", "avisos_emprestimo"),
+        "lida": ("comunicacao", "avisos_emprestimo"),
+        "data_criacao": ("comunicacao", "avisos_emprestimo"),
     },
     "auditoria.RegistroAuditoria": {
         "usuario": "seguranca",
@@ -136,3 +151,7 @@ CAMPOS_TECNICOS = {
         "name", "step", "t0", "digits", "tolerance", "drift",
     },
 }
+
+def finalidades_do_campo(valor):
+    """Normaliza o valor do MAPEAMENTO: sempre devolve uma tupla de finalidades."""
+    return (valor,) if isinstance(valor, str) else tuple(valor)

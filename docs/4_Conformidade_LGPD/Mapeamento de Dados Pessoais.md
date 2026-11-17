@@ -7,7 +7,7 @@
 
 ## 1. Objetivo
 
-Este documento associa **cada campo** gravado pelo sistema que se refere a uma pessoa a uma **finalidade**, a uma **base legal** da LGPD (art. 7º) e a um **prazo de retenção**. Também registra as decisões de **minimização**: o que o sistema deixou de coletar ou de guardar e por quê.
+Este documento associa **cada campo** gravado pelo sistema que se refere a uma pessoa a uma ou mais **finalidades**, a uma **base legal** da LGPD (art. 7º) e a um **prazo de retenção**. Também registra as decisões de **minimização**: o que o sistema deixou de coletar ou de guardar e por quê.
 
 O mapeamento não existe só neste documento. Ele está no código, em `usuarios/lgpd.py`, e um teste automatizado compara esse mapeamento com os campos reais do banco (seção 6). Se alguém criar um campo novo sem classificá-lo, o teste falha e a mudança não entra na `main`.
 
@@ -17,12 +17,13 @@ O mapeamento não existe só neste documento. Ele está no código, em `usuarios
 |---|---|---|
 | `acesso` | Identificar o titular e permitir o login com segurança | Execução de contrato (art. 7º, V) |
 | `emprestimo` | Registrar quem solicitou, retirou e devolveu cada equipamento | Execução de contrato (art. 7º, V) |
-| `comunicacao` | Avisar o titular sobre seus empréstimos e sobre a segurança da conta | Execução de contrato (art. 7º, V) |
-| `contato_alternativo` | Contato da equipe com o titular, por telefone, sobre um equipamento emprestado | Consentimento (art. 7º, I); campo opcional |
+| `comunicacao` | Avisar o titular sobre a segurança da conta e permitir a recuperação de senha | Execução de contrato (art. 7º, V) |
+| `avisos_emprestimo` | Avisar por e-mail sobre o andamento dos empréstimos (aprovação, recusa, devolução, prorrogação) | Consentimento (art. 7º, I); opcional |
+| `contato_alternativo` | Contato da equipe com o titular, por telefone, sobre um equipamento emprestado | Consentimento (art. 7º, I); opcional |
 | `consentimento` | Comprovar quando e qual versão da política o titular aceitou | Cumprimento de obrigação legal (art. 7º, II; art. 8º, § 2º) |
 | `seguranca` | Proteger as contas, investigar incidentes e manter a trilha de auditoria | Legítimo interesse (art. 7º, IX; art. 10, § 3º) |
 
-**Por que nem tudo é consentimento.** O empréstimo de um equipamento da instituição não acontece sem saber quem o retirou. Esses dados são condição do próprio serviço, e a base legal adequada é a execução de contrato (art. 7º, V). Se fossem tratados como consentimento, revogar o consentimento teria que apagar o registro de quem está com um equipamento, o que inviabilizaria o controle patrimonial. O consentimento fica reservado para o que é **opcional**: hoje, o telefone.
+**Por que nem tudo é consentimento.** O empréstimo de um equipamento da instituição não acontece sem saber quem o retirou. Esses dados são condição do próprio serviço, e a base legal adequada é a execução de contrato (art. 7º, V). Se fossem tratados como consentimento, revogar o consentimento teria que apagar o registro de quem está com um equipamento, o que inviabilizaria o controle patrimonial. O consentimento fica reservado para o que é **opcional**: os avisos por e-mail sobre os empréstimos e o contato por telefone. Cada um tem aceite próprio.
 
 **Legítimo interesse e segurança.** Os registros de segurança (auditoria, tentativas de login) protegem o próprio titular, e o art. 10, § 3º, exige transparência sobre esse uso. Por isso eles estão descritos na Política de Privacidade.
 
@@ -37,14 +38,16 @@ Os prazos marcados com **(automático)** são aplicados pela rotina de retençã
 | `username` | Nome de usuário | `acesso` | Enquanto a conta existir; anonimizado no encerramento |
 | `password` | Hash da senha (PBKDF2-SHA256) | `acesso` | Enquanto a conta existir; invalidado no encerramento |
 | `first_name`, `last_name` | Nome e sobrenome | `acesso` | Enquanto a conta existir; anonimizados no encerramento |
-| `email` | E-mail institucional | `comunicacao` | Enquanto a conta existir; anonimizado no encerramento |
+| `email` | E-mail institucional | `comunicacao`; `avisos_emprestimo` (só com consentimento) | Enquanto a conta existir; anonimizado no encerramento |
 | `matricula` | Matrícula (RA/SIAPE) | `emprestimo` | Enquanto a conta existir; anonimizada no encerramento |
 | `papel` | Vínculo (aluno, docente, administrador) | `acesso` | Enquanto a conta existir |
 | `telefone` | Telefone, **cifrado** (Fernet) | `contato_alternativo` | Enquanto houver consentimento; apagado no encerramento |
 | `is_active` | Conta ativa ou suspensa | `acesso` | Enquanto a conta existir |
 | `date_joined` | Data de criação da conta | `acesso` | Enquanto a conta existir |
 | `last_login` | Data do último login | `seguranca` | Enquanto a conta existir |
-| `consentimento_dados`, `data_consentimento`, `versao_documento_aceito` | Registro do aceite | `consentimento` | Mantido junto à conta, inclusive após a anonimização, como prova do consentimento (art. 8º, § 2º) |
+| `consentimento_dados`, `data_consentimento`, `versao_documento_aceito` | Registro do aceite da política | `consentimento` | Mantido junto à conta, inclusive após a anonimização, como prova do consentimento (art. 8º, § 2º) |
+
+**Histórico de consentimento por finalidade (`usuarios.ConsentimentoFinalidade`):** os campos `usuario`, `finalidade`, `aceito`, `data_hora` e `versao_politica` registram cada aceite e cada recusa das finalidades opcionais. Finalidade: `consentimento`. Retenção: igual à do registro do aceite. Os registros nunca são alterados; cada mudança vira uma linha nova.
 
 **Conta suspensa por revogação do consentimento:** os dados ficam guardados para que o próprio titular possa reativar a conta. Depois de **12 meses** sem reativação, a conta é anonimizada **(automático)**.
 
@@ -62,7 +65,7 @@ Os prazos marcados com **(automático)** são aplicados pela rotina de retençã
 |---|---|---|---|---|
 | `Emprestimo` | `usuario`, `equipamento`, datas, `status`, `prorrogacao_solicitada` | Histórico de empréstimos | `emprestimo` | **5 anos** após a devolução, para o controle patrimonial; após o encerramento da conta, fica ligado à conta anonimizada |
 | `Emprestimo` | `observacoes` | Texto livre do titular | `emprestimo` | Apagado no encerramento da conta, porque pode conter dado pessoal |
-| `Notificacao` | `usuario`, `mensagem`, `tipo`, `lida`, `data_criacao` | Avisos enviados ao titular | `comunicacao` | Lidas: **90 dias** **(automático)**; todas: apagadas no encerramento |
+| `Notificacao` | `usuario`, `mensagem`, `tipo`, `lida`, `data_criacao` | Avisos enviados ao titular | `comunicacao`; `avisos_emprestimo` (só gravados com consentimento) | Lidas: **90 dias** **(automático)**; todas: apagadas no encerramento |
 
 ### 3.4 Segurança e auditoria
 
@@ -112,7 +115,7 @@ Isso não depende só do formulário. A API de cadastro aceita somente os campos
 
 ## 5. Relação com os demais itens
 
-- **4.5 — Consentimento por finalidade:** a finalidade `contato_alternativo` (telefone) é a que depende de consentimento próprio, separado do aceite da política.
+- **4.5 — Consentimento por finalidade:** as finalidades `avisos_emprestimo` e `contato_alternativo` dependem de consentimento próprio, separado do aceite da política (modelo `ConsentimentoFinalidade`; testes em `usuarios/testes_consentimento.py`).
 - **4.10 — Eliminação e retenção:** os prazos marcados como **(automático)** na seção 3 são aplicados pela rotina de retenção, e o encerramento da conta passa a cobrir todos os campos indicados como "apagado no encerramento".
 
 ## 6. Como a completude do mapeamento é verificada

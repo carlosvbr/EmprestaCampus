@@ -112,6 +112,36 @@ class Usuario(AbstractUser):
     def __str__(self):
         return f"{self.get_full_name() or self.username} ({self.get_papel_display()})"
 
+    
+    # --- LGPD: consentimento por finalidade ---
+
+    def consentiu(self, finalidade):
+        """Situação atual do consentimento para uma finalidade opcional."""
+        ultimo = self.consentimentos.filter(finalidade=finalidade).first()
+        return bool(ultimo and ultimo.aceito)
+
+    def definir_consentimento(self, finalidade, aceito):
+        """
+        Registra a escolha do titular para uma finalidade, só se ela mudou.
+        Devolve True quando houve mudança.
+
+        Sem consentimento para o contato por telefone, o telefone guardado
+        é apagado: o dado deixa de ter finalidade (art. 15, III e art. 16).
+        """
+        if self.consentimentos.filter(finalidade=finalidade).exists() and self.consentiu(finalidade) == aceito:
+            return False
+
+        ConsentimentoFinalidade.objects.create(
+            usuario=self,
+            finalidade=finalidade,
+            aceito=aceito,
+            versao_politica=settings.VERSAO_POLITICA_PRIVACIDADE,
+        )
+        if finalidade == Finalidade.CONTATO_TELEFONE and not aceito and self.telefone:
+            self.telefone = None
+            self.save(update_fields=["telefone"])
+        return True
+
 
 class TokenRecuperacaoSenha(models.Model):
     """
@@ -143,7 +173,46 @@ class TokenRecuperacaoSenha(models.Model):
         return f"Token de {self.usuario.username} (usado={self.usado})"
 
 
+class Finalidade(models.TextChoices):
+    """
+    Finalidades opcionais, que dependem de consentimento próprio.
+    Os códigos são os mesmos do mapeamento em usuarios/lgpd.py.
+    """
 
+    CONTATO_TELEFONE = "contato_alternativo", "Contato por telefone sobre os meus empréstimos"
+    AVISOS_EMAIL = "avisos_emprestimo", "Avisos por e-mail sobre o andamento dos meus empréstimos"
+
+
+class ConsentimentoFinalidade(models.Model):
+    """
+    Histórico de consentimentos por finalidade (LGPD).
+
+    Cada aceite ou recusa vira uma linha nova, com data e versão da
+    política; nenhuma linha é alterada depois de gravada. A situação
+    atual de uma finalidade é a da linha mais recente. Assim fica
+    registrado não só o que o titular escolheu, mas quando escolheu.
+    """
+
+    usuario = models.ForeignKey(Usuario, on_delete=models.CASCADE, related_name="consentimentos")
+    finalidade = models.CharField(max_length=30, choices=Finalidade.choices)
+    aceito = models.BooleanField()
+    data_hora = models.DateTimeField(auto_now_add=True)
+    versao_politica = models.CharField(max_length=10)
+
+    class Meta:
+        ordering = ["-data_hora", "-id"]
+        verbose_name = "consentimento por finalidade"
+        verbose_name_plural = "consentimentos por finalidade"
+
+    def save(self, *args, **kwargs):
+        if self.pk:
+            raise ValueError("Um registro de consentimento não pode ser alterado; registre uma nova escolha.")
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        situacao = "aceito" if self.aceito else "recusado"
+        return f"{self.usuario_id} - {self.finalidade}: {situacao} em {self.data_hora:%d/%m/%Y %H:%M}"
+    
 
 class DispositivoTOTP(TimestampMixin, ThrottlingMixin, Device):
     """

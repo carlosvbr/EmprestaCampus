@@ -5,6 +5,7 @@ from django.utils import timezone
 
 from auditoria.models import RegistroAuditoria
 from notificacoes.utils import notificar
+from usuarios.models import Finalidade
 from .models import Emprestimo
 
 
@@ -65,6 +66,7 @@ class EmprestimoAdmin(admin.ModelAdmin):
                 emprestimo.usuario,
                 f'Seu empréstimo de "{emprestimo.equipamento.nome}" foi aprovado. '
                 f'Devolução prevista: {emprestimo.data_devolucao_prevista:%d/%m/%Y}.',
+                finalidade=Finalidade.AVISOS_EMAIL,
             )
 
             aprovados += 1
@@ -90,6 +92,7 @@ class EmprestimoAdmin(admin.ModelAdmin):
                 emprestimo.usuario,
                 f'Seu pedido de empréstimo de "{emprestimo.equipamento.nome}" foi rejeitado. '
                 f'Você pode solicitar novamente pelo catálogo.',
+                finalidade=Finalidade.AVISOS_EMAIL,
             )
 
         self.message_user(request, f'{len(pendentes)} empréstimo(s) rejeitado(s).')
@@ -117,6 +120,7 @@ class EmprestimoAdmin(admin.ModelAdmin):
             notificar(
                 emprestimo.usuario,
                 f'A devolução de "{emprestimo.equipamento.nome}" foi registrada com sucesso. Obrigado!',
+                finalidade=Finalidade.AVISOS_EMAIL,
             )
 
         self.message_user(request, f'{len(aprovados)} devolução(ões) registrada(s).')
@@ -144,6 +148,7 @@ class EmprestimoAdmin(admin.ModelAdmin):
                 emprestimo.usuario,
                 f'Sua prorrogação de "{emprestimo.equipamento.nome}" foi aprovada. '
                 f'Nova data de devolução: {emprestimo.data_devolucao_prevista:%d/%m/%Y}.',
+                finalidade=Finalidade.AVISOS_EMAIL,
             )
 
         self.message_user(request, f'{len(pendentes)} prorrogação(ões) aprovada(s).')
@@ -167,6 +172,7 @@ class EmprestimoAdmin(admin.ModelAdmin):
                 emprestimo.usuario,
                 f'Seu pedido de prorrogação de "{emprestimo.equipamento.nome}" foi rejeitado. '
                 f'A devolução continua prevista para {emprestimo.data_devolucao_prevista:%d/%m/%Y}.',
+                finalidade=Finalidade.AVISOS_EMAIL,
             )
 
         self.message_user(request, f'{len(pendentes)} pedido(s) de prorrogação rejeitado(s).')

@@ -69,12 +69,29 @@
             <input type="password" id="password" required minlength="8" placeholder="Mínimo de 8 caracteres">
         </div>
 
-        <!-- Bloco atualizado com o link da Política de Privacidade -->
+        <!-- Aceite da política: obrigatório, cobre só o necessário ao empréstimo -->
         <div class="checkbox-group">
             <input type="checkbox" id="consentimento" required>
             <label for="consentimento">
-                Declaro que li e concordo com a coleta e tratamento dos meus dados pessoais, conforme a 
-                <a href="{% url 'politica_privacidade' %}" target="_blank" class="link-privacidade">Política de Privacidade (LGPD)</a>.
+                Declaro que li a
+                <a href="{% url 'politica_privacidade' %}" target="_blank" class="link-privacidade">Política de Privacidade (LGPD)</a>
+                e concordo com o tratamento dos dados necessários ao cadastro e aos empréstimos.
+            </label>
+        </div>
+
+        <!-- LGPD: finalidades opcionais, uma caixa para cada, desmarcadas.
+             Recusar não impede o cadastro e pode ser mudado em "Meu Perfil". -->
+        <p style="font-size: 13px; color: #555; margin-bottom: 8px;"><strong>Opcional:</strong> autorizo também</p>
+        <div class="checkbox-group">
+            <input type="checkbox" id="consentimento_avisos_email">
+            <label for="consentimento_avisos_email">
+                Receber por e-mail avisos sobre o andamento dos meus empréstimos (aprovação, recusa, devolução e prorrogação).
+            </label>
+        </div>
+        <div class="checkbox-group">
+            <input type="checkbox" id="consentimento_telefone">
+            <label for="consentimento_telefone">
+                Guardar o meu telefone para contato da equipe sobre os meus empréstimos.
             </label>
         </div>
         
@@ -110,7 +127,9 @@
             telefone: document.getElementById('telefone').value || null,
             papel: document.getElementById('papel').value,
             password: document.getElementById('password').value,
-            consentimento_dados: document.getElementById('consentimento').checked // <--- O ajuste principal
+            consentimento_dados: document.getElementById('consentimento').checked,
+            consentimento_telefone: document.getElementById('consentimento_telefone').checked,
+            consentimento_avisos_email: document.getElementById('consentimento_avisos_email').checked
         };
 
         try {

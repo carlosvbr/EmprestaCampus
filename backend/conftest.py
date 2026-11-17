@@ -2,7 +2,7 @@ import pytest
 from django.test import Client
 
 from inventario.models import Categoria, Equipamento
-from usuarios.models import Usuario
+from usuarios.models import Finalidade, Usuario
 
 # Com mais de um backend de autenticação configurado (Axes + ModelBackend),
 # o force_login exige dizer qual usar.
@@ -13,9 +13,13 @@ BACKEND_SESSAO = "django.contrib.auth.backends.ModelBackend"
 def aluno(db):
     # Sem senha de propósito: o teste usa force_login ou JWT, e criar
     # usuário sem senha evita o custo do hash PBKDF2 (600.000 iterações).
-    return Usuario.objects.create_user(
+    usuario = Usuario.objects.create_user(
         username="aluno_teste", email="aluno@exemplo.com", papel="ALUNO"
     )
+    # Os testes do fluxo de empréstimo conferem os avisos por e-mail, que
+    # só são enviados a quem autorizou essa finalidade.
+    usuario.definir_consentimento(Finalidade.AVISOS_EMAIL, True)
+    return usuario
 
 
 @pytest.fixture
