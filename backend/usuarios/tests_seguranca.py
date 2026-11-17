@@ -2,6 +2,7 @@ import time
 import pytest
 
 from unittest.mock import patch
+from django.conf import settings
 from django.db import connection
 from django.urls import reverse
 from django.contrib.auth import authenticate
@@ -766,7 +767,7 @@ class TestExportacaoDeDados:
         assert dados["vinculo"] == "Docente"
         assert dados["status_conta"] == "Ativa"
         assert dados["consentimento_dados"] is True
-        assert dados["versao_documento_aceito"] == "v1.0"
+        assert dados["versao_documento_aceito"] == settings.VERSAO_POLITICA_PRIVACIDADE
         assert dados["data_consentimento"] is not None
 
     def test_baixa_como_arquivo(self):
