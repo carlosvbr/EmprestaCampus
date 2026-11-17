@@ -14,7 +14,7 @@ from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
-from .models import DispositivoTOTP, TokenRecuperacaoSenha, Usuario
+from .models import DispositivoTOTP, Finalidade, TokenRecuperacaoSenha, Usuario
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -359,7 +359,10 @@ def validar_dois_fatores_view(request):
 
 @login_required
 def perfil_view(request):
-    return render(request, 'usuarios/perfil.html')
+    return render(request, 'usuarios/perfil.html', {
+        'consente_telefone': request.user.consentiu(Finalidade.CONTATO_TELEFONE),
+        'consente_avisos_email': request.user.consentiu(Finalidade.AVISOS_EMAIL),
+    })
 
 
 @login_required
@@ -403,6 +406,47 @@ def revogar_consentimento_view(request):
 
     return redirect('perfil')
 
+@login_required
+def atualizar_consentimentos_view(request):
+    """
+    Consentimento por finalidade (LGPD): o titular liga e desliga cada
+    finalidade opcional, independente das outras e sem perder o acesso.
+    Cada mudança vira uma linha nova no histórico e um registro na auditoria.
+    """
+    if request.method != 'POST':
+        return redirect('perfil')
+
+    usuario = request.user
+    aceita_telefone = request.POST.get('consentimento_telefone') == 'on'
+    aceita_avisos = request.POST.get('consentimento_avisos_email') == 'on'
+    telefone = request.POST.get('telefone', '').strip()
+
+    if aceita_telefone and not (telefone or usuario.telefone):
+        messages.error(request, 'Para autorizar o contato por telefone, informe o número.')
+        return redirect('perfil')
+
+    mudancas = []
+    if usuario.definir_consentimento(Finalidade.CONTATO_TELEFONE, aceita_telefone):
+        mudancas.append(f"contato por telefone {'autorizado' if aceita_telefone else 'revogado (telefone apagado)'}")
+    if aceita_telefone and telefone and telefone != usuario.telefone:
+        usuario.telefone = telefone
+        usuario.save(update_fields=['telefone'])
+        mudancas.append('telefone atualizado')
+    if usuario.definir_consentimento(Finalidade.AVISOS_EMAIL, aceita_avisos):
+        mudancas.append(f"avisos por e-mail {'autorizados' if aceita_avisos else 'revogados'}")
+
+    if mudancas:
+        RegistroAuditoria.objects.create(
+            usuario=usuario,
+            acao='UPDATE',
+            modulo_afetado='Privacidade/LGPD',
+            descricao='Consentimento por finalidade: ' + '; '.join(mudancas) + '.',
+            ip_origem=get_client_ip(request),
+        )
+        messages.success(request, 'Suas autorizações foram atualizadas.')
+    else:
+        messages.info(request, 'Nenhuma autorização foi alterada.')
+    return redirect('perfil')
 
 @login_required
 def encerrar_conta_view(request):
@@ -488,6 +532,15 @@ def exportar_dados_view(request):
         "consentimento_dados": usuario.consentimento_dados,
         "data_consentimento": formatar(usuario.data_consentimento),
         "versao_documento_aceito": usuario.versao_documento_aceito,
+        "consentimentos_por_finalidade": [
+            {
+                "finalidade": consentimento.get_finalidade_display(),
+                "situacao": "Aceito" if consentimento.aceito else "Recusado",
+                "data": formatar(consentimento.data_hora),
+                "versao_politica": consentimento.versao_politica,
+            }
+            for consentimento in usuario.consentimentos.all()
+        ],
         "emprestimos": emprestimos,
     }
 
