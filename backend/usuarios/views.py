@@ -14,7 +14,7 @@ from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
-from django_otp.plugins.otp_totp.models import TOTPDevice
+from .models import DispositivoTOTP, TokenRecuperacaoSenha, Usuario
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -211,7 +211,7 @@ def login_view(request):
             return redirect('reativar_conta_lgpd')
 
         if user is not None:
-            tem_2fa = TOTPDevice.objects.filter(user=user, confirmed=True).exists()
+            tem_2fa = DispositivoTOTP.objects.filter(user=user, confirmed=True).exists()
 
             if tem_2fa:
                 request.session['pre_2fa_user_id'] = user.id
@@ -255,9 +255,9 @@ class AtivarDoisFatoresView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
-        TOTPDevice.objects.filter(user=request.user, confirmed=False).delete()
+        DispositivoTOTP.objects.filter(user=request.user, confirmed=False).delete()
 
-        device = TOTPDevice.objects.create(
+        device = DispositivoTOTP.objects.create(
             user=request.user,
             name="dispositivo-padrao",
             confirmed=False,
@@ -277,7 +277,7 @@ class ConfirmarDoisFatoresView(APIView):
 
     def post(self, request):
         codigo = request.data.get("codigo", "")
-        device = TOTPDevice.objects.filter(user=request.user, confirmed=False).first()
+        device = DispositivoTOTP.objects.filter(user=request.user, confirmed=False).first()
         ip = get_client_ip(request)
 
         if not device:
@@ -328,7 +328,7 @@ def validar_dois_fatores_view(request):
 
     if request.method == 'POST':
         codigo = request.POST.get('codigo', '')
-        device = TOTPDevice.objects.filter(user=usuario, confirmed=True).first()
+        device = DispositivoTOTP.objects.filter(user=usuario, confirmed=True).first()
 
         if device and device.verify_token(codigo):
             del request.session['pre_2fa_user_id']
@@ -420,7 +420,7 @@ def encerrar_conta_view(request):
             ip_origem=ip
         )
 
-        TOTPDevice.objects.filter(user=usuario).delete()
+        DispositivoTOTP.objects.filter(user=usuario).delete()
         TokenRecuperacaoSenha.objects.filter(usuario=usuario).delete()
 
         usuario.username = prefixo
@@ -499,12 +499,12 @@ def exportar_dados_view(request):
 @login_required
 def configurar_2fa_view(request):
 
-    if TOTPDevice.objects.filter(user=request.user, confirmed=True).exists():
+    if DispositivoTOTP.objects.filter(user=request.user, confirmed=True).exists():
         return render(request, 'usuarios/configurar_2fa.html', {'ativo': True})
 
     if request.method == 'POST':
         codigo = request.POST.get('codigo', '')
-        device = TOTPDevice.objects.filter(user=request.user, confirmed=False).first()
+        device = DispositivoTOTP.objects.filter(user=request.user, confirmed=False).first()
         ip = get_client_ip(request)
 
         if device and device.verify_token(codigo):
@@ -531,9 +531,9 @@ def configurar_2fa_view(request):
             )
             messages.error(request, 'Código inválido. Tente novamente.')
 
-    TOTPDevice.objects.filter(user=request.user, confirmed=False).delete()
+    DispositivoTOTP.objects.filter(user=request.user, confirmed=False).delete()
 
-    device = TOTPDevice.objects.create(
+    device = DispositivoTOTP.objects.create(
         user=request.user,
         name="dispositivo-padrao",
         confirmed=False,
@@ -557,7 +557,7 @@ def revogar_2fa_view(request):
         return redirect('perfil')
 
     ip = get_client_ip(request)
-    dispositivos = TOTPDevice.objects.filter(user=request.user)
+    dispositivos = DispositivoTOTP.objects.filter(user=request.user)
 
     if not dispositivos.filter(confirmed=True).exists():
 
@@ -696,7 +696,7 @@ class LoginAPIView(APIView):
             )
             return Response({"detail": "Credenciais invalidas."}, status=status.HTTP_401_UNAUTHORIZED)
 
-        tem_2fa = TOTPDevice.objects.filter(user=user, confirmed=True).exists()
+        tem_2fa = DispositivoTOTP.objects.filter(user=user, confirmed=True).exists()
 
         if tem_2fa:
             return Response(
@@ -750,7 +750,7 @@ class VerificarDoisFatoresLoginView(APIView):
                 status=status.HTTP_401_UNAUTHORIZED,
             )
 
-        device = TOTPDevice.objects.filter(user=usuario, confirmed=True).first()
+        device = DispositivoTOTP.objects.filter(user=usuario, confirmed=True).first()
 
         if not device or not device.verify_token(codigo):
             RegistroAuditoria.objects.create(

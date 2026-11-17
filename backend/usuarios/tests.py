@@ -8,7 +8,7 @@ from django.test import Client
 from django.urls import get_resolver
 from django.utils import timezone
 from django_otp.oath import TOTP
-from django_otp.plugins.otp_totp.models import TOTPDevice
+from usuarios.models import DispositivoTOTP, TokenRecuperacaoSenha, Usuario
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenObtainSlidingView
 
 from auditoria.models import RegistroAuditoria
@@ -35,7 +35,7 @@ def usuario_2fa(db):
     usuario = Usuario.objects.create_user(
         username="aval_2fa", password=SENHA, email="aval2fa@exemplo.com", consentimento_dados=True
     )
-    device = TOTPDevice.objects.create(user=usuario, name="padrao", confirmed=True)
+    device = DispositivoTOTP.objects.create(user=usuario, name="padrao", confirmed=True)
     return usuario, device
 
 

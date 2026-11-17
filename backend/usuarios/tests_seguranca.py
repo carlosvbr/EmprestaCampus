@@ -7,7 +7,7 @@ from django.urls import reverse
 from django.contrib.auth import authenticate
 from django.test import Client
 from django_otp.oath import TOTP
-from django_otp.plugins.otp_totp.models import TOTPDevice
+from usuarios.models import DispositivoTOTP, TokenRecuperacaoSenha, Usuario
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from inventario.models import Categoria
@@ -119,7 +119,7 @@ class TestDoisFatores:
             password="senha12345",
             consentimento_dados=True,
         )
-        TOTPDevice.objects.create(user=usuario, name="dispositivo-padrao", confirmed=True)
+        DispositivoTOTP.objects.create(user=usuario, name="dispositivo-padrao", confirmed=True)
 
         client = Client()
         resposta = client.post(
@@ -133,7 +133,7 @@ class TestDoisFatores:
 
     def test_codigo_2fa_incorreto_nao_libera_acesso(self):
         usuario = Usuario.objects.create_user(username="teste_2fa_falha", password="senha12345")
-        device = TOTPDevice.objects.create(user=usuario, name="dispositivo-padrao", confirmed=True)
+        device = DispositivoTOTP.objects.create(user=usuario, name="dispositivo-padrao", confirmed=True)
 
         assert device.verify_token("000000") is False
 
@@ -161,7 +161,7 @@ class TestLoginSpaDoisFatores:
             password="senha12345",
             consentimento_dados=True,
         )
-        device = TOTPDevice.objects.create(user=usuario, name="dispositivo-padrao", confirmed=True)
+        device = DispositivoTOTP.objects.create(user=usuario, name="dispositivo-padrao", confirmed=True)
         return usuario, device
 
     def _login(self, client):
@@ -502,7 +502,7 @@ def _cliente_logado(usuario):
 
 
 def _ativar_2fa(usuario, confirmado=True):
-    return TOTPDevice.objects.create(
+    return DispositivoTOTP.objects.create(
         user=usuario, name="dispositivo-padrao", confirmed=confirmado
     )
 
@@ -537,7 +537,7 @@ class TestRevogacaoDoisFatores:
         resposta = self._revogar(cliente_aluno)
 
         assert resposta.status_code == 302
-        assert not TOTPDevice.objects.filter(user=aluno).exists()
+        assert not DispositivoTOTP.objects.filter(user=aluno).exists()
 
     def test_depois_de_revogar_o_login_volta_a_entrar_so_com_senha(self):
         usuario = Usuario.objects.create_user(
@@ -565,14 +565,14 @@ class TestRevogacaoDoisFatores:
 
         assert resposta.status_code == 302
         assert "/api/usuarios/entrar/" in resposta.url
-        assert TOTPDevice.objects.filter(user=aluno).exists()
+        assert DispositivoTOTP.objects.filter(user=aluno).exists()
 
     def test_get_nao_revoga(self, cliente_aluno, aluno):
         _ativar_2fa(aluno)
 
         cliente_aluno.get(reverse("revogar_2fa"))
 
-        assert TOTPDevice.objects.filter(user=aluno).exists()
+        assert DispositivoTOTP.objects.filter(user=aluno).exists()
 
     def test_revogar_grava_auditoria(self, cliente_aluno, aluno):
         _ativar_2fa(aluno)
@@ -617,8 +617,8 @@ class TestRevogacaoDoisFatores:
 
         self._revogar(cliente_aluno)
 
-        assert not TOTPDevice.objects.filter(user=aluno).exists()
-        assert TOTPDevice.objects.filter(user=outro_aluno, confirmed=True).exists()
+        assert not DispositivoTOTP.objects.filter(user=aluno).exists()
+        assert DispositivoTOTP.objects.filter(user=outro_aluno, confirmed=True).exists()
 
     def test_ativacao_pendente_e_limpa_sem_avisar(
         self, cliente_aluno, aluno, mailoutbox
@@ -627,7 +627,7 @@ class TestRevogacaoDoisFatores:
 
         self._revogar(cliente_aluno)
 
-        assert not TOTPDevice.objects.filter(user=aluno).exists()
+        assert not DispositivoTOTP.objects.filter(user=aluno).exists()
         assert len(mailoutbox) == 0
 
     def test_perfil_mostra_a_confirmacao_depois_de_desativar(
@@ -664,7 +664,7 @@ class TestPaginaConfigurar2FA:
         self._abrir(cliente_aluno)
         self._abrir(cliente_aluno)
 
-        assert TOTPDevice.objects.filter(user=aluno).count() == 1
+        assert DispositivoTOTP.objects.filter(user=aluno).count() == 1
 
     def test_com_2fa_desligado_mostra_o_qr_code_e_nao_o_botao(
         self, cliente_aluno, aluno
@@ -673,7 +673,7 @@ class TestPaginaConfigurar2FA:
 
         assert "data:image/png;base64" in html
         assert "Desativar 2FA" not in html
-        assert TOTPDevice.objects.filter(user=aluno, confirmed=False).count() == 1
+        assert DispositivoTOTP.objects.filter(user=aluno, confirmed=False).count() == 1
 
 
 @pytest.mark.django_db
