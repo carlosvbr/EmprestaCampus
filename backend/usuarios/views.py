@@ -6,7 +6,9 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.password_validation import validate_password
 from django.core import signing
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.mail import send_mail
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
@@ -122,6 +124,20 @@ class RedefinirSenhaView(APIView):
                 {"detail": "A senha precisa ter ao menos 8 caracteres."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        # Aplica as mesmas regras de senha do settings.AUTH_PASSWORD_VALIDATORS
+        # (senha comum, só números, parecida com os dados do usuário).
+        try:
+            validate_password(nova_senha, user=token.usuario)
+        except DjangoValidationError as erro:
+            RegistroAuditoria.objects.create(
+                usuario=token.usuario,
+                acao='RECUPERACAO_FALHA',
+                modulo_afetado='Autenticação/Recuperação',
+                descricao='Falha na recuperação: Senha nova rejeitada pela política de senhas.',
+                ip_origem=ip
+            )
+            return Response({"detail": " ".join(erro.messages)}, status=status.HTTP_400_BAD_REQUEST)
 
         token.usuario.set_password(nova_senha)
         token.usuario.save()
