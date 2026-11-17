@@ -146,6 +146,18 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
+    # Limite de requisições por cliente (rate limiting) para toda a API,
+    # contra abuso e negação de serviço, inclusive envio repetido de
+    # e-mails de recuperação de senha. Complementa o django-axes, que
+    # bloqueia força bruta no login.
+    "DEFAULT_THROTTLE_CLASSES": (
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+    ),
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": "60/minute",
+        "user": "300/minute",
+    },
 }
 
 from datetime import timedelta
