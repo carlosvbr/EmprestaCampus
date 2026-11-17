@@ -31,7 +31,7 @@ def enviar_email(usuario, assunto, mensagem):
     return True
 
 
-def notificar(usuario, mensagem, tipo='EMAIL'):
+def notificar(usuario, mensagem, tipo='EMAIL', finalidade=None):
     """
     Ponto único de notificação do sistema. Faz duas coisas:
 
@@ -39,7 +39,13 @@ def notificar(usuario, mensagem, tipo='EMAIL'):
        independente de o e-mail ter sido entregue ou não.
     2. Se o tipo for EMAIL, envia o e-mail.
 
+    finalidade: quando o aviso pertence a uma finalidade
+    opcional (ex.: avisos sobre empréstimos), ele só é enviado e
+    registrado se o titular consentiu com ela. Avisos de segurança da
+    conta não passam finalidade e são sempre enviados.
     """
+    if finalidade and not usuario.consentiu(finalidade):
+        return
     Notificacao.objects.create(
         usuario=usuario,
         mensagem=mensagem,
