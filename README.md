@@ -98,9 +98,17 @@ A cada push ou Pull Request para a `main`, duas esteiras automatizadas verificam
 | Privacidade (LGPD) - Bearer | Bearer CLI | Vazamento de dados pessoais no código | Achado critical, high ou medium |
 | Supply Chain - SBOM (Trivy) | Trivy | Gera o inventário de componentes (SBOM CycloneDX) | Não bloqueia; publica o `sbom.json` |
 
+### Testes automatizados (`.github/workflows/testes-postgresql.yml`)
+
+| Job | Ferramenta | O que verifica | Bloqueia quando |
+|---|---|---|---|
+| Testes - pytest (PostgreSQL) | pytest + PostgreSQL 16 | Suíte completa de testes contra um banco PostgreSQL real | Qualquer teste falhar |
+
+Cada execução publica o artefato `resultado-testes`, com o ambiente usado, a saída do `pytest` e o relatório JUnit.
+
 ### Proteção da branch `main`
 
-A `main` é protegida por um ruleset: alterações só entram por Pull Request, e o merge fica bloqueado até os jobs `Secrets Scanning - TruffleHog`, `SCA - Trivy` e `SAST - Semgrep` passarem. Os relatórios de cada execução ficam disponíveis como artefatos na aba **Actions**, e os achados do Semgrep aparecem em **Security > Code scanning**.
+A `main` é protegida por um ruleset: alterações só entram por Pull Request, e o merge fica bloqueado até os jobs `Secrets Scanning - TruffleHog`, `SCA - Trivy`, `SAST - Semgrep` e `Testes - pytest (PostgreSQL)` passarem. Os relatórios de cada execução ficam disponíveis como artefatos na aba **Actions**, e os achados do Semgrep aparecem em **Security > Code scanning**.
 
 Medidas de segurança das próprias esteiras: actions de terceiros fixadas pelo SHA do commit, binários das ferramentas verificados por SHA-256, permissão somente de leitura e segredos de teste gerados a cada execução.
 
@@ -208,7 +216,16 @@ Com os containers em execução:
 docker compose exec backend python -m pytest -v
 ```
 
-A suíte tem 149 casos de teste, cobrindo autenticação, 2FA, recuperação de senha, controle de acesso, LGPD, auditoria, inventário, empréstimos e notificações. A descrição de cada teste e o resultado da execução estão em docs.
+A suíte tem 234 casos de teste, cobrindo autenticação, 2FA, recuperação de senha, controle de acesso, criptografia, LGPD (mapeamento, consentimento por finalidade e retenção), auditoria, inventário, empréstimos e notificações. A descrição de cada teste e o resultado da execução estão em `docs/6_Documentacao_Tecnico_Cientifica/Testes de Seguranca.md`.
+
+## Rotinas de manutenção
+
+| Comando | Quando executar | O que faz |
+|---|---|---|
+| `python manage.py aplicar_retencao` | **Uma vez por dia**, agendado (cron ou agendador do servidor) | Elimina os dados que passaram do prazo de retenção da LGPD e anonimiza contas suspensas há mais de 12 meses. Prazos em `docs/4_Conformidade_LGPD/Eliminação e Retenção de Dados.md` |
+| `python manage.py rotacionar_chave_criptografia` | Ao trocar a `ENCRYPTION_KEY` | Recifra o telefone e a chave do 2FA com a chave nova. Antes, a chave atual vai para `ENCRYPTION_KEYS_ANTIGAS` e a nova para `ENCRYPTION_KEY`; depois, a antiga é retirada. Procedimento em `docs/3_Comunicacao_Criptografia/criptografia.md` |
+
+No Docker, use `docker compose exec backend python manage.py <comando>`. Depois de um `git pull` que traga arquivos novos em `migrations/`, rode também `python manage.py migrate`.
 
 ### Executar sem Docker (desenvolvimento)
 

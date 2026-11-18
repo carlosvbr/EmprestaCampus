@@ -19,10 +19,10 @@ Um ativo, no contexto de segurança da informação, é qualquer recurso que ten
 |---|---|---|
 | Credenciais de usuário | Username, senha (hash PBKDF2-SHA256) e papel (RBAC) | Crítico |
 | Dados pessoais do usuário | Nome, e-mail, matrícula e telefone | Dado pessoal (LGPD) |
-| Telefone do usuário | Único campo pessoal armazenado com criptografia reversível (Fernet) | Dado pessoal |
-| Registro de consentimento | Situação, data e versão da Política de Privacidade aceita | Dado pessoal (LGPD), prova de conformidade |
+| Telefone do usuário | Opcional, guardado só com autorização; armazenado com criptografia reversível (Fernet) | Dado pessoal |
+| Registro de consentimento | Situação, data e versão da Política de Privacidade aceita, data da revogação e histórico de aceites e recusas por finalidade | Dado pessoal (LGPD), prova de conformidade |
 | Tokens de recuperação de senha | Tokens de uso único, com expiração de 1 hora | Crítico, temporário |
-| Segredo TOTP (2FA) | Chave secreta compartilhada entre o servidor e o aplicativo autenticador do usuário | Crítico |
+| Segredo TOTP (2FA) | Chave secreta compartilhada entre o servidor e o aplicativo autenticador do usuário; armazenada com criptografia reversível (Fernet) | Crítico |
 | Sessões web e tokens JWT | Identificam o usuário autenticado; sessão de 30 minutos, JWT de acesso de 1 hora e refresh de 7 dias | Crítico, temporário |
 | Registros de auditoria | Histórico de login, falhas, 2FA, recuperação de senha, LGPD, inventário e empréstimos, com IP de origem | Íntegro, não deve ser alterável |
 | Dados de catálogo e empréstimo | Equipamentos, categorias, solicitações, prazos e histórico de empréstimos | Operacional; o histórico é dado pessoal |
@@ -44,7 +44,7 @@ Um ativo, no contexto de segurança da informação, é qualquer recurso que ten
 | Ativo | Descrição |
 |---|---|
 | `SECRET_KEY` | Chave usada pelo Django para assinar sessões, tokens CSRF e o token intermediário do login com 2FA na API |
-| `ENCRYPTION_KEY` | Chave Fernet usada para criptografar o campo telefone, separada da `SECRET_KEY` |
+| `ENCRYPTION_KEY` | Chave Fernet usada para criptografar o telefone e a chave do 2FA, separada da `SECRET_KEY`; durante a rotação, as chaves anteriores ficam em `ENCRYPTION_KEYS_ANTIGAS` |
 | Senha do banco de dados | Credencial do PostgreSQL (`POSTGRES_PASSWORD`) |
 | Credenciais SMTP | Usuário e senha do servidor de e-mail |
 | Certificado TLS | Certificado e chave privada usados pelo Nginx para servir HTTPS |
@@ -69,11 +69,18 @@ As ameaças abaixo estão agrupadas segundo as categorias do **OWASP Top 10:2025
 
 **Ameaça:** dados sensíveis (senhas, dados pessoais, tráfego de rede) protegidos com algoritmo fraco, chave exposta no código-fonte ou ausência completa de criptografia, permitindo que um atacante com acesso ao banco de dados ou à rede leia informações que deveriam estar protegidas.
 
+**Vulnerabilidade identificada e corrigida:** a chave secreta do 2FA era guardada em texto puro pelo `django-otp`. Quem lesse a tabela, por um backup vazado ou uma injeção de SQL, conseguiria gerar os códigos de 2FA de qualquer usuário. Também não havia como trocar a `ENCRYPTION_KEY` sem perder os dados já cifrados.
+
 ### 3.3 Falhas de autenticação
 
 **Ameaça:** um atacante assume a identidade de outro usuário através de senha fraca, ausência de segundo fator, tentativas ilimitadas de login (força bruta) ou reutilização de token de recuperação de senha.
 
-**Vulnerabilidade identificada e corrigida:** o bloqueio contra força bruta era aplicado por IP **ou** por usuário. Atrás do Nginx, todos os usuários chegam com o mesmo IP, então cinco erros na conta de uma pessoa bloqueavam todas as outras por 30 minutos, transformando a proteção em um vetor de negação de serviço.
+**Vulnerabilidades identificadas e corrigidas:**
+
+- **Bloqueio que derrubava todos:** o bloqueio contra força bruta era aplicado por IP **ou** por usuário. Atrás do Nginx, todos os usuários chegam com o mesmo IP, então cinco erros na conta de uma pessoa bloqueavam todas as outras por 30 minutos, transformando a proteção em um vetor de negação de serviço.
+- **Senha fraca aceita pela API:** o cadastro e a redefinição de senha só exigiam 8 caracteres, embora os validadores do Django estivessem configurados (apontado pelo Semgrep, CWE-521).
+- **API sem limite de requisições:** era possível disparar e-mails de recuperação em massa ou testar códigos de 2FA sem limite (apontado pelo Semgrep, CWE-770).
+- **Estado pré-2FA sem prazo no login web:** depois da senha correta, o código de 2FA podia ser digitado a qualquer momento.
 
 ### 3.4 Configuração incorreta de segurança
 
@@ -106,7 +113,12 @@ As ameaças abaixo estão agrupadas segundo as categorias do **OWASP Top 10:2025
 
 **Ameaça:** o tratamento dos dados pessoais deixa de cumprir o que a Política de Privacidade promete ao titular, especialmente na exclusão dos dados.
 
-**Vulnerabilidade identificada e corrigida:** o encerramento da conta anonimizava nome, usuário, e-mail e matrícula, mas mantinha o telefone, o dispositivo TOTP e os tokens de recuperação, embora a tela informasse que os dados haviam sido "anonimizados irreversivelmente".
+**Vulnerabilidades identificadas e corrigidas:**
+
+- **Encerramento incompleto:** o encerramento da conta anonimizava nome, usuário, e-mail e matrícula, mas mantinha o telefone, o dispositivo TOTP e os tokens de recuperação, embora a tela informasse que os dados haviam sido "anonimizados irreversivelmente". Numa segunda revisão, também ficavam as notificações, as observações dos empréstimos, as tentativas de login e as sessões abertas.
+- **Consentimento genérico:** um único aceite cobria todos os usos dos dados, sem a possibilidade de recusar uma finalidade e manter as outras (art. 8º, § 4º).
+- **Dados sem finalidade:** o cadastro exigia o telefone sem que nenhuma função dependesse dele, e o `django-axes` guardava uma cópia de cada login bem-sucedido (art. 6º, III).
+- **Retenção indefinida:** nenhum dado tinha prazo para ser eliminado, nem mesmo a conta suspensa por revogação ou a trilha de auditoria (arts. 15 e 16).
 
 ## 4. Associação Risco × Contramedida
 
@@ -124,23 +136,26 @@ As ameaças abaixo estão agrupadas segundo as categorias do **OWASP Top 10:2025
 | 4 | Quebra de controle de acesso | Acesso a empréstimos ou dados de outro usuário | Consultas filtradas pelo usuário logado; o cliente não define o dono nem o status do pedido; exportação restrita ao próprio titular | `emprestimos/views.py`, `emprestimos/serializers.py`, `usuarios/views.py` | Média | Médio | Baixo |
 | 5 | Quebra de controle de acesso | Logout por GET permitia a um site externo encerrar a sessão do usuário (CSRF) | Logout aceita apenas `POST` com token CSRF | `usuarios/views.py` — `logout_view`, templates | Baixa | Baixo | Baixo |
 | 6 | Falhas criptográficas | Senha armazenada sem proteção adequada | Hash PBKDF2-SHA256 com 600.000 iterações e salt único por senha | `usuarios/hashers.py` | Média | Alto | Baixo |
-| 7 | Falhas criptográficas | Dado pessoal (telefone) armazenado sem proteção | Criptografia simétrica autenticada (Fernet) no campo `telefone`, com chave separada da `SECRET_KEY` | `usuarios/crypto.py` | Média | Médio | Médio |
+| 7 | Falhas criptográficas | Dados pessoais e segredos (telefone e chave do 2FA) armazenados sem proteção; chave de criptografia sem possibilidade de troca | Criptografia simétrica autenticada (Fernet) no telefone e na chave do 2FA (`DispositivoTOTP`), com chave separada da `SECRET_KEY`; rotação com `MultiFernet` e comando de recifragem; inventário de todos os dados armazenados | `usuarios/crypto.py`, `usuarios/models.py`, comando `rotacionar_chave_criptografia` | Média | Alto | Baixo |
 | 8 | Falhas criptográficas | Chaves secretas expostas no código-fonte versionado | Segredos lidos do `.env`, que não é versionado nem copiado para a imagem Docker | `config/settings.py`, `.gitignore`, `.dockerignore` | Média | Alto | Baixo |
 | 9 | Falhas criptográficas | Tráfego entre cliente e servidor sem criptografia | HTTPS via Nginx com certificado TLS e redirecionamento 301 de HTTP para HTTPS; backend acessível apenas pela rede interna do Docker | `nginx/nginx.conf`, `docker-compose.yml` | Média | Alto | Baixo |
-| 10 | Falhas de autenticação | Ausência de segundo fator de autenticação | Autenticação de dois fatores (TOTP), validada antes da criação da sessão ou da emissão do JWT | `usuarios/views.py`, `django-otp` | Média | Alto | Médio |
-| 11 | Falhas de autenticação | Tentativas ilimitadas de login (força bruta) | Bloqueio de 30 minutos após 5 tentativas incorretas | `django-axes`, `config/settings.py` | Alta | Alto | Médio |
+| 10 | Falhas de autenticação | Ausência de segundo fator de autenticação | Autenticação de dois fatores (TOTP), validada antes da criação da sessão ou da emissão do JWT; estado pré-2FA expira em 5 minutos (web e API); proteção contra reuso do código; limite de 10 tentativas por minuto na API | `usuarios/views.py`, `django-otp`, `config/settings.py` | Média | Alto | Médio |
+| 11 | Falhas de autenticação | Tentativas ilimitadas de login e de requisições (força bruta) | Bloqueio de 30 minutos após 5 tentativas incorretas; limite de requisições da API (60/min anônimo, 300/min autenticado) | `django-axes`, `config/settings.py` (`REST_FRAMEWORK`) | Alta | Alto | Médio |
 | 12 | Falhas de autenticação | Bloqueio por IP derrubava todos os usuários atrás do Nginx | Bloqueio pela combinação de IP e usuário, usando o IP real do cliente | `config/settings.py` (`AXES_LOCKOUT_PARAMETERS`, `AXES_CLIENT_IP_CALLABLE`) | Alta | Médio | Baixo |
-| 13 | Falhas de autenticação | Token de recuperação de senha reutilizável ou sem expiração | Token de uso único, gerado com `secrets.token_urlsafe`, com expiração de 1 hora; os demais tokens do usuário são invalidados após a redefinição | `usuarios/models.py`, `usuarios/views.py` | Média | Alto | Médio |
+| 13 | Falhas de autenticação | Token de recuperação de senha reutilizável ou sem expiração; envio de e-mails em massa | Token de uso único, gerado com `secrets.token_urlsafe`, com expiração de 1 hora; os demais tokens do usuário são invalidados após a redefinição; limite de 5 pedidos por hora; tokens eliminados 7 dias após expirar | `usuarios/models.py`, `usuarios/views.py`, `usuarios/retencao.py` | Média | Alto | Médio |
 | 14 | Configuração incorreta de segurança | Cookies transmitidos sem proteção e navegador sem obrigação de HTTPS | `SESSION_COOKIE_SECURE`, `CSRF_COOKIE_SECURE`, HSTS e `SECURE_SSL_REDIRECT` ativos com `DEBUG=False`; `X_FRAME_OPTIONS` e `nosniff` sempre ativos | `config/settings.py` | Média | Médio | Médio |
 | 15 | Injeção | SQL Injection e injeção de scripts nas páginas (XSS) | Consultas pelo ORM do Django (parametrizadas); escape automático nos templates; proteção CSRF nos formulários | `*/views.py`, templates | Média | Alto | Baixo |
-| 16 | Falhas de integridade de dados | Registros de auditoria alteráveis ou apagáveis fora do Django Admin | Imutabilidade em três camadas: Django Admin, model/queryset e trigger no PostgreSQL | `auditoria/admin.py`, `auditoria/models.py`, `auditoria/migrations/0003_auto_20261012_1140.py` | Média | Alto | Médio |
+| 16 | Falhas de integridade de dados | Registros de auditoria alteráveis ou apagáveis fora do Django Admin | Imutabilidade em três camadas: Django Admin, model/queryset e trigger no PostgreSQL; o trigger só permite eliminar registros com mais de 5 anos (retenção) e continua bloqueando qualquer alteração | `auditoria/admin.py`, `auditoria/models.py`, `auditoria/migrations/0003_auto_20261012_1140.py`, `0004_retencao_da_auditoria.py` | Média | Alto | Médio |
 | 17 | Falhas de registro e alerta | Registro de auditoria incompleto diante de falhas de autenticação | Cada tentativa de login, 2FA e recuperação, com sucesso ou falha, gera um registro com data, ação e IP | `usuarios/views.py`, módulo `auditoria` | Média | Médio | Baixo |
 | 18 | Falhas de registro e alerta | IP de origem forjável pelo cabeçalho `X-Forwarded-For` | IP lido do cabeçalho `X-Real-IP`, preenchido pelo Nginx, e validado como endereço IP | `auditoria/utils.py` | Alta | Médio | Baixo |
 | 19 | Falhas de registro e alerta | Texto digitado no login e e-mail da recuperação gravados num log imutável | A auditoria não grava o que foi digitado; registra apenas o resultado e o usuário, quando identificado | `usuarios/views.py` | Média | Médio | Baixo |
 | 20 | Condições excepcionais | Erros inesperados revelando detalhes, registrando eventos falsos ou interrompendo o sistema | Exclusão protegida retorna erro claro sem log falso; falha no envio de e-mail é registrada sem interromper a operação; token de 2FA inválido ou expirado é negado | `inventario/views.py`, `notificacoes/utils.py`, `usuarios/views.py` | Média | Médio | Baixo |
-| 21 | Privacidade (LGPD) | Encerramento da conta mantinha telefone, dispositivo TOTP e tokens de recuperação | Encerramento apaga o telefone, os dispositivos TOTP e os tokens, anonimiza os demais dados e torna a senha inutilizável | `usuarios/views.py` — `encerrar_conta_view` | Média | Alto | Baixo |
+| 21 | Privacidade (LGPD) | Encerramento da conta mantinha telefone, dispositivo TOTP, tokens, notificações, observações dos empréstimos, tentativas de login e sessões | Encerramento anonimiza a conta e elimina todos os vínculos do titular, torna a senha inutilizável e encerra as sessões; é bloqueado com empréstimo em aberto | `usuarios/retencao.py` — `anonimizar_usuario`; `usuarios/views.py` — `encerrar_conta_view` | Média | Alto | Baixo |
+| 22 | Privacidade (LGPD) | Consentimento genérico, sem escolha por finalidade | Base legal própria para cada finalidade; consentimento separado para os usos opcionais (avisos por e-mail e telefone), com histórico imutável e efeito real no envio e na guarda dos dados | `usuarios/models.py` — `ConsentimentoFinalidade`; `notificacoes/utils.py` | Média | Médio | Baixo |
+| 23 | Privacidade (LGPD) | Dados coletados sem finalidade e guardados sem prazo | Mapeamento campo a campo com teste de completude; telefone opcional; sem cópia dos logins no `django-axes`; rotina de retenção com prazos definidos e anonimização de conta suspensa há 12 meses | `usuarios/lgpd.py`, `usuarios/retencao.py`, comando `aplicar_retencao` | Média | Médio | Médio |
+| 24 | Falhas de autenticação | Senhas fracas aceitas pela API no cadastro e na redefinição | `validate_password` com os quatro validadores do Django antes de gravar a senha | `usuarios/serializers.py`, `usuarios/views.py` | Alta | Alto | Baixo |
 
-As linhas com risco residual **Médio** (7, 10, 11, 13, 14 e 16) têm a justificativa e a melhoria prevista descritas em `Limitacoes.md`.
+As linhas com risco residual **Médio** (10, 11, 13, 14, 16 e 23) têm a justificativa e a melhoria prevista descritas em `Limitacoes.md`.
 
 ## 5. Fundamentação Técnica e Normativa
 
@@ -152,7 +167,7 @@ As decisões de segurança do EmprestaCampus se apoiam em normas e guias reconhe
 
 3. **NIST SP 800-63B** — orienta as decisões de autenticação: armazenamento de senhas com função de derivação de chave, limitação de tentativas e uso de TOTP em vez de SMS como segundo fator (NIST, 2017).
 
-4. **Lei nº 13.709/2018 (LGPD)** — base legal para a classificação dos dados pessoais (seção 2.1) e para os riscos à privacidade do titular (seção 3.9), incluindo consentimento, exportação e anonimização dos dados (BRASIL, 2018).
+4. **Lei nº 13.709/2018 (LGPD)** — base legal para a classificação dos dados pessoais (seção 2.1) e para os riscos à privacidade do titular (seção 3.9), incluindo consentimento por finalidade, minimização, exportação, anonimização e retenção dos dados (BRASIL, 2018).
 
 5. **ISO/IEC 27001** — a estrutura deste documento segue a lógica de gestão de riscos da norma: identificação dos ativos, das ameaças e vulnerabilidades, avaliação de probabilidade e impacto, escolha de controles e registro do risco residual aceito (ISO, 2022).
 

@@ -19,7 +19,7 @@ Implementado na função `login_view` e associado à rota web (`entrar/`), geren
 
 - **Restrição de Método HTTP:** a requisição `GET` apenas exibe o formulário. As credenciais só são processadas em requisições `POST`, garantindo que trafeguem no corpo da requisição e não na URL.
 - **Validação de Credenciais (`authenticate`):** o Django compara o hash da senha enviada com o armazenado no PostgreSQL. A tentativa é contabilizada pelo `django-axes`, que bloqueia a combinação de IP e usuário por 30 minutos após 5 erros e exibe a página `lockout.html`.
-- **Segundo Fator (2FA):** se o usuário tem um dispositivo TOTP confirmado, a sessão ainda não é criada. O sistema guarda o usuário de forma provisória e redireciona para `2fa/validar/` (`validar_dois_fatores_view`), onde o código de 6 dígitos é conferido.
+- **Segundo Fator (2FA):** se o usuário tem um dispositivo TOTP confirmado, a sessão ainda não é criada. O sistema guarda o usuário de forma provisória, junto com o horário da senha correta, e redireciona para `2fa/validar/` (`validar_dois_fatores_view`), onde o código de 6 dígitos é conferido. Esse estado provisório vale **5 minutos**: depois disso, a sessão é limpa e é preciso digitar a senha de novo.
 - **Criação de Sessão (`login`):** só depois da senha correta (e do código TOTP, quando houver), a função `login()` acopla o usuário à sessão e emite o cookie de sessão (`HttpOnly`). A sessão expira após 30 minutos de inatividade ou ao fechar o navegador.
 - **Redirecionamento Pós-Login:** o sistema executa um redirecionamento controlado via `redirect('home')` para o endpoint protegido (`home_view`), que renderiza o painel inicial do usuário.
 - **Conta Suspensa por Revogação de Consentimento (LGPD):** quando o titular revogou o consentimento, a conta fica inativa e o `authenticate()` não a aceita. Nesse caso, e somente se a senha digitada estiver correta, o usuário é levado à tela `reativar-conta/`, onde pode restaurar o consentimento. A autorização para reativar vale 5 minutos e é de uso único. Contas desativadas pelo administrador ou anonimizadas não têm acesso a essa tela.
@@ -32,7 +32,7 @@ Utiliza a biblioteca `djangorestframework-simplejwt` para gerar os tokens, com u
 - **Primeira Etapa (`login_spa`):** mapeada na rota `login/spa/` (`LoginAPIView`), valida usuário e senha enviados via JSON.
   - Usuário **sem** 2FA: recebe diretamente o par de tokens (`access` e `refresh`).
   - Usuário **com** 2FA: recebe apenas `requer_2fa: true` e um token intermediário (`token_2fa`), assinado com a `SECRET_KEY` e válido por 5 minutos. Nenhum JWT é emitido nesta etapa, e o identificador do usuário não é exposto.
-- **Segunda Etapa (`login_spa_2fa`):** mapeada na rota `login/spa/2fa/` (`VerificarDoisFatoresLoginView`), recebe o `token_2fa` e o código TOTP. Só com o token íntegro, dentro do prazo, e o código correto, emite o par de tokens JWT.
+- **Segunda Etapa (`login_spa_2fa`):** mapeada na rota `login/spa/2fa/` (`VerificarDoisFatoresLoginView`), recebe o `token_2fa` e o código TOTP. Só com o token íntegro, dentro do prazo, e o código correto, emite o par de tokens JWT. Esta rota aceita no máximo 10 tentativas por minuto por IP; acima disso, responde HTTP 429.
 - **Renovação de Token (`login_renovar`):** mapeada na rota `login/renovar/` (`TokenRefreshView`), permite que o cliente obtenha um novo token de acesso utilizando o `refresh`, sem reenviar a senha.
 - **Validade dos Tokens:** o token de acesso vale 1 hora e o `refresh` vale 7 dias.
 
@@ -43,9 +43,11 @@ A rota `login/` (`TokenObtainPairView`), que existia em versões anteriores, foi
 O cadastro inicial de novos usuários é tratado pelo endpoint público `RegistroView` (herdando de `generics.CreateAPIView`), consumido pela tela `cadastrar/`:
 
 - **Permissão Aberta (`AllowAny`):** configurado explicitamente para permitir o acesso de novos usuários sem a exigência de um token prévio.
-- **Segurança na Criação:** a requisição delega a persistência ao `RegistroSerializer`, que exige senha de no mínimo 8 caracteres e invoca o método `set_password()` (hash PBKDF2-SHA256) antes de gravar o usuário. A senha é `write_only` e nunca aparece nas respostas da API.
+- **Segurança na Criação:** a requisição delega a persistência ao `RegistroSerializer`, que aplica a política de senha (`validate_password()`, com os validadores de `AUTH_PASSWORD_VALIDATORS`) e invoca o método `set_password()` (hash PBKDF2-SHA256) antes de gravar o usuário. A senha é `write_only` e nunca aparece nas respostas da API.
 - **Papel Restrito:** o cadastro público só aceita os papéis Aluno e Docente. Uma tentativa de se cadastrar como Administrador é recusada com erro 400; esse papel só é atribuído por um administrador.
 - **Consentimento Obrigatório (LGPD):** o cadastro só é concluído com o aceite da Política de Privacidade (`consentimento_dados`). A data e a versão do aceite são registradas automaticamente.
+- **Usos Opcionais (LGPD):** os avisos de empréstimo por e-mail e o telefone para contato têm caixas próprias, desmarcadas por padrão. As duas escolhas, inclusive a recusa, ficam registradas no histórico de consentimento. O telefone só é aceito com a autorização correspondente.
+- **Limite de Requisições:** como toda a API, o cadastro aceita no máximo 60 requisições por minuto por IP para visitantes.
 
 ### 5. Tratamento de Erros e Feedback Visual
 

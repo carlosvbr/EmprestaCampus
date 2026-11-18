@@ -24,6 +24,8 @@ O envio é feito pela função `enviar_email` (`notificacoes/utils.py`), por SMT
 
 A API retorna a mesma mensagem ("Se o e-mail existir, um link de recuperação foi enviado.") mesmo quando o e-mail não está cadastrado. Isso evita que alguém descubra quais e-mails possuem conta no sistema.
 
+A rota aceita no máximo **5 pedidos por hora** por IP (limite `recuperacao_senha` do Django REST Framework). A partir do 6º pedido, responde HTTP 429. Isso impede o uso do sistema para enviar e-mails em massa a terceiros.
+
 ## 3. Redefinição de senha
 
 A redefinição é realizada pela `RedefinirSenhaView`.
@@ -69,6 +71,8 @@ Se qualquer verificação dos passos 3 a 6 falhar, a senha não é alterada, a f
 | RNF04 | O sistema não deve revelar se um e-mail está cadastrado.        |
 | RNF05 | O sistema deve registrar eventos de recuperação para auditoria. |
 | RNF06 | O processo deve utilizar comunicação segura.                    |
+| RNF07 | O sistema deve limitar o número de pedidos de recuperação.      |
+| RNF08 | Os tokens vencidos devem ser eliminados após um prazo definido. |
 
 ## 6. Validações
 
@@ -84,7 +88,18 @@ O sistema verifica:
 
 ### Nova senha
 
-A senha deve possuir pelo menos **8 caracteres**. Ela é gravada com hash PBKDF2-SHA256 (600.000 iterações), como no cadastro.
+A nova senha passa pela mesma política do cadastro, com `validate_password()` e os validadores de `AUTH_PASSWORD_VALIDATORS`:
+
+* no mínimo **8 caracteres**;
+* diferente dos dados do usuário (nome, usuário, e-mail);
+* fora da lista de senhas comuns, como `password123`;
+* não composta só por números, como `12345678`.
+
+Uma senha recusada não é gravada: a API responde `400` com o motivo e a falha é registrada na auditoria. A senha aceita é gravada com hash PBKDF2-SHA256 (600.000 iterações), como no cadastro.
+
+### Retenção dos tokens
+
+Os tokens vencidos são eliminados pela rotina de retenção (`python manage.py aplicar_retencao`) 7 dias depois de expirar, e todos os tokens do titular são apagados se ele encerrar a conta.
 
 ## 7. Auditoria
 

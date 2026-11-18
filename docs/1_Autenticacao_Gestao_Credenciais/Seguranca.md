@@ -13,15 +13,20 @@ Esta documentação apresenta os principais recursos de segurança implementados
 
 ## 2. Regras de senha
 
-- O cadastro (`RegistroSerializer`) e a redefinição de senha (`RedefinirSenhaView`) exigem **no mínimo 8 caracteres**.
-- O `settings.py` declara os validadores do Django em `AUTH_PASSWORD_VALIDATORS` (similaridade com dados do usuário, tamanho mínimo, senhas comuns e senhas só numéricas), mas **eles não são chamados pelas views**. Hoje uma senha como `12345678` é aceita. Essa é uma limitação conhecida (ver Limitacoes.md).
+- O cadastro (`RegistroSerializer`) e a redefinição de senha (`RedefinirSenhaView`) chamam `validate_password()` antes de gravar a senha. Assim são aplicados os quatro validadores de `AUTH_PASSWORD_VALIDATORS`: **mínimo de 8 caracteres**, **senha diferente dos dados do usuário** (nome, usuário, e-mail), **fora da lista de senhas comuns** e **não só numérica**.
+- Senhas como `12345678` ou `password123` são recusadas com erro 400 e a explicação do motivo. Na redefinição, a recusa também é registrada na auditoria.
+
+**Justificativa:** a NIST SP 800-63B recomenda comparar a senha nova com listas de senhas comuns ou vazadas, em vez de exigir combinações obrigatórias de caracteres. Essa é a abordagem dos validadores do Django.
 
 ## 3. Autenticação de dois fatores (2FA)
 
 - Implementada com **TOTP** (`django-otp`), opcional por usuário, ativada pela leitura de um QR Code em "Meu Perfil".
 - **Login web:** a sessão só é criada depois do código TOTP correto.
 - **Login pela API:** a primeira etapa (`login/spa/`) devolve apenas um token intermediário assinado com a `SECRET_KEY`, válido por 5 minutos. O JWT só é emitido na segunda etapa (`login/spa/2fa/`), com o código correto. O identificador do usuário nunca é exposto ao cliente.
-- Tentativas de código erradas sofrem atraso progressivo (throttling nativo do `django-otp`).
+- Tentativas de código erradas sofrem atraso progressivo (throttling nativo do `django-otp`), e o mesmo código não é aceito duas vezes (proteção contra replay).
+- **Prazo para o segundo fator:** depois da senha correta, o código precisa ser informado em até **5 minutos**, tanto no login web quanto na API. Depois disso, é preciso digitar a senha de novo.
+- **Limite de tentativas na API:** no máximo **10 códigos por minuto** por IP (`login_2fa`). A 11ª tentativa recebe HTTP 429.
+- **Chave secreta cifrada:** a chave do TOTP fica cifrada no banco (modelo `DispositivoTOTP`), como o telefone. Detalhes em `criptografia.md`.
 - O usuário pode desativar o 2FA. A desativação é registrada na auditoria e o dono da conta é avisado por e-mail.
 
 **Justificativa:** o TOTP (RFC 6238) funciona offline, não depende de operadora e não sofre com interceptação de SMS ou troca de chip, motivos pelos quais a NIST SP 800-63B restringe o SMS como segundo fator.
@@ -32,6 +37,8 @@ Esta documentação apresenta os principais recursos de segurança implementados
 - O bloqueio é pela **combinação de IP e usuário** (`AXES_LOCKOUT_PARAMETERS = [["ip_address", "username"]]`). Atrás do Nginx, um bloqueio só por IP derrubaria todos os usuários, porque todos chegariam com o mesmo endereço.
 - O IP usado pelo axes é o mesmo da auditoria (`AXES_CLIENT_IP_CALLABLE`, seção 9).
 - Cobre o login web e o login pela API, já que os dois usam `authenticate()`. Há uma página própria de bloqueio (`lockout.html`).
+
+- **Limite de requisições da API** (Django REST Framework): 60 por minuto para visitantes (contados por IP) e 300 por minuto para usuários autenticados (contados por usuário). Rotas sensíveis têm limites próprios: **5 pedidos de recuperação de senha por hora** e **10 tentativas de código 2FA por minuto**. Acima do limite, a API responde HTTP 429.
 
 **Justificativa:** 5 tentativas equilibram usabilidade (erros de digitação) e proteção. O bloqueio temporário, em vez de permanente, evita que um atacante bloqueie contas de propósito por tempo indeterminado.
 
@@ -61,12 +68,15 @@ Esta documentação apresenta os principais recursos de segurança implementados
 
 - Token gerado com `secrets.token_urlsafe(32)` (256 bits), válido por 1 hora e de uso único.
 - Ao redefinir a senha, **todos os tokens pendentes do usuário são invalidados**.
+- A nova senha passa pela mesma política do cadastro (seção 2).
+- No máximo **5 pedidos de recuperação por hora** por IP, para impedir o envio de e-mails em massa.
+- Tokens vencidos são eliminados pela rotina de retenção 7 dias depois de expirar.
 - O link é enviado por e-mail (SMTP, ou console em desenvolvimento). Detalhes em `RecSenha.md`.
 
 ## 9. Auditoria
 
 - Eventos de autenticação, 2FA, recuperação, LGPD, inventário e empréstimos são registrados em `RegistroAuditoria`.
-- Os registros são **imutáveis em três camadas**: Django Admin, model/queryset e trigger no PostgreSQL.
+- Os registros são **imutáveis em três camadas**: Django Admin, model/queryset e trigger no PostgreSQL. A única exclusão permitida é a de registros com mais de 5 anos, pela rotina de retenção da LGPD; alterações continuam bloqueadas.
 - O IP vem do cabeçalho `X-Real-IP`, preenchido pelo Nginx, validado como endereço IP. O cabeçalho `X-Forwarded-For`, que o cliente pode forjar, não é usado.
 - O texto digitado no login e o e-mail digitado na recuperação não são gravados, evitando dados pessoais (ou senhas digitadas no campo errado) num log que não pode ser apagado.
 
@@ -75,9 +85,9 @@ Detalhes em `Auditoria e Logs.md`.
 ## 10. Criptografia, comunicação e configuração
 
 - **Em trânsito:** HTTPS/TLS no Nginx (porta 443), com redirecionamento 301 da porta 80. Com `DEBUG=False`, o Django também força HTTPS (`SECURE_SSL_REDIRECT`) e envia HSTS por 30 dias.
-- **Em repouso:** o telefone é cifrado com **Fernet** (AES-128-CBC com HMAC-SHA256), com chave própria (`ENCRYPTION_KEY`), separada da `SECRET_KEY`.
+- **Em repouso:** o telefone e a chave secreta do 2FA são cifrados com **Fernet** (AES-128-CBC com HMAC-SHA256), com chave própria (`ENCRYPTION_KEY`), separada da `SECRET_KEY`. A chave pode ser trocada sem perder os dados (`MultiFernet` e comando `rotacionar_chave_criptografia`).
 - **Cabeçalhos:** `X-Frame-Options: DENY` (clickjacking) e `X-Content-Type-Options: nosniff` (MIME sniffing).
 - **Segredos:** `SECRET_KEY`, `ENCRYPTION_KEY`, senha do banco e credenciais SMTP vêm do `.env`, que não é versionado. `DEBUG` e `ALLOWED_HOSTS` também vêm do `.env`.
-- **LGPD:** consentimento obrigatório no cadastro, revogação com suspensão da conta, reativação apenas com a senha do titular, exportação dos dados em JSON e encerramento com anonimização (nome, username, e-mail, matrícula, telefone, dispositivo 2FA e tokens de recuperação).
+- **LGPD:** aceite da política obrigatório no cadastro e consentimento separado para cada uso opcional (avisos por e-mail e telefone), com histórico; revogação com suspensão da conta e reativação apenas com a senha do titular; exportação dos dados em JSON; encerramento que anonimiza a conta e elimina todos os vínculos; rotina de retenção com prazos para cada dado. Detalhes nos documentos da pasta `4_Conformidade_LGPD`.
 
 Detalhes em `criptografia.md` e na Política de Privacidade.

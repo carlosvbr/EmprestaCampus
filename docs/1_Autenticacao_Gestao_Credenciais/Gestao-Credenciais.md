@@ -8,7 +8,7 @@ Este documento detalha a implementação das funcionalidades de gerenciamento de
 ### 1. Cadastro de Usuários (API REST)
 * O cadastro inicial de novos usuários é processado pela classe `RegistroView`, localizada em `usuarios/views.py`, e consumido pela tela `cadastrar/`.
 * A view herda de `generics.CreateAPIView` e possui permissão pública (`permissions.AllowAny`), permitindo o registro de contas sem autenticação prévia.
-* A senha enviada na requisição é recebida pelo `RegistroSerializer`, que exige no mínimo 8 caracteres, marca o campo como `write_only` (a senha nunca aparece em respostas da API) e delega o hash ao método nativo `set_password()`.
+* A senha enviada na requisição é recebida pelo `RegistroSerializer`, que aplica a política de senha (`validate_password()`: mínimo de 8 caracteres, diferente dos dados do usuário, fora da lista de senhas comuns e não só numérica), marca o campo como `write_only` (a senha nunca aparece em respostas da API) e delega o hash ao método nativo `set_password()`.
 * **Segurança:** o hash é feito com **PBKDF2-SHA256 com 600.000 iterações**, definidas na subclasse `PBKDF2HasherReforcado` (`usuarios/hashers.py`) e registradas em `PASSWORD_HASHERS`. Cada senha recebe um salt aleatório próprio, e o banco guarda apenas o formato `pbkdf2_sha256$600000$<salt>$<hash>`. A senha em texto puro nunca é persistida no PostgreSQL.
 * **Papel restrito:** o cadastro público só aceita os papéis Aluno e Docente. Um pedido com o papel Administrador é recusado com erro 400.
 * **Consentimento:** a conta só é criada com o aceite da Política de Privacidade; a data e a versão do aceite são gravadas automaticamente.
@@ -44,9 +44,10 @@ Este documento detalha a implementação das funcionalidades de gerenciamento de
 * **`usuarios/views.py`**: cadastro (`RegistroView`), login web (`login_view`) e via API (`LoginAPIView`, `VerificarDoisFatoresLoginView`), 2FA (ativação, validação e revogação), recuperação de senha, logout, reativação e encerramento de conta.
 * **`usuarios/urls.py`**: mapeamento das rotas, separando as APIs JSON das rotas baseadas em sessão HTML.
 * **`usuarios/serializers.py`**: validação dos dados de cadastro, restrição de papel, consentimento obrigatório e hash da senha.
-* **`usuarios/models.py`**: model `Usuario` (papel, sincronização de privilégios, consentimento) e `TokenRecuperacaoSenha` (token, expiração e uso único).
+* **`usuarios/models.py`**: model `Usuario` (papel, sincronização de privilégios, consentimento), `TokenRecuperacaoSenha` (token, expiração e uso único), `DispositivoTOTP` (2FA com a chave secreta cifrada) e `ConsentimentoFinalidade` (histórico de consentimento por finalidade).
+* **`usuarios/retencao.py`**: anonimização da conta no encerramento e rotina de retenção dos dados.
 * **`usuarios/hashers.py`**: hasher `PBKDF2HasherReforcado`, com as 600.000 iterações.
-* **`config/settings.py`**: hashers, sessão, cookies, `django-axes` e SimpleJWT.
+* **`config/settings.py`**: hashers, validadores de senha, sessão, cookies, `django-axes`, SimpleJWT e limites de requisição da API (`REST_FRAMEWORK`).
 * **`templates/usuarios/`**: `login.html`, `validar_2fa.html`, `configurar_2fa.html`, `perfil.html`, `reativar_conta.html` e `lockout.html`. Todos os formulários usam a tag `{% csrf_token %}` contra falsificação de solicitações entre sites.
 
 ### 6. Considerações Finais
