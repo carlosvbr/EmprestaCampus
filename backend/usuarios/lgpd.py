@@ -64,6 +64,7 @@ MAPEAMENTO = {
         "consentimento_dados": "consentimento",
         "data_consentimento": "consentimento",
         "versao_documento_aceito": "consentimento",
+        "consentimento_revogado_em": "consentimento",
     },
     "usuarios.DispositivoTOTP": {
         "user": "acesso",

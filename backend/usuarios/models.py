@@ -77,11 +77,18 @@ class Usuario(AbstractUser):
         blank=True, 
         help_text="Data e hora exata do aceite (LGPD 4.7)"
     )
+
     versao_documento_aceito = models.CharField(
         max_length=10, 
         blank=True, 
         null=True, 
         help_text="Versão da Política de Privacidade aceita (ex: v1.0) (LGPD 4.7)"
+    )
+    consentimento_revogado_em = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Quando o titular revogou o consentimento e teve o acesso suspenso. "
+                  "Conta suspensa há mais de 12 meses é anonimizada pela rotina de retenção.",
     )
 
     def save(self, *args, **kwargs):

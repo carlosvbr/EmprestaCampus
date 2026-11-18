@@ -39,8 +39,8 @@ O EmprestaCampus adota estritamente o princípio da minimização (Art. 6º, III
 Os titulares podem exercer seus direitos de forma automatizada:
 
 * **Autoatendimento:** Através da aba "Meu Perfil", o usuário pode consultar ativamente seus dados (Art. 18, II), exportar um relatório estruturado JSON com seus dados cadastrais, o registro do consentimento e o histórico de empréstimos (Art. 18, V), autorizar ou retirar cada uso opcional dos dados em "Minhas Autorizações" (Art. 8º, § 5º), revogar o consentimento (Art. 18, IX) e solicitar o encerramento da conta com anonimização irreversível dos dados (Art. 18, IV e VI).
-* **Revogação do consentimento:** Ao revogar, o acesso ao sistema é suspenso imediatamente. Os dados permanecem armazenados enquanto a conta estiver suspensa, para permitir que o próprio titular reative a conta, o que exige a sua senha. Para a eliminação dos dados, deve ser utilizado o encerramento da conta.
-* **Encerramento da conta:** Nome, nome de usuário, e-mail, matrícula e telefone são substituídos por valores anônimos; a senha, o segredo do 2FA e os links de recuperação de senha são invalidados. A operação não pode ser desfeita.
+* **Revogação do consentimento:** Ao revogar, o acesso ao sistema é suspenso imediatamente. Os dados permanecem armazenados enquanto a conta estiver suspensa, para permitir que o próprio titular reative a conta, o que exige a sua senha. Para a eliminação dos dados, deve ser utilizado o encerramento da conta. Se a conta não for reativada em 12 meses, ela é anonimizada automaticamente.
+* **Encerramento da conta:** Nome, nome de usuário, e-mail e matrícula são substituídos por valores anônimos; o telefone, o segredo do 2FA, os links de recuperação de senha, as notificações, as observações dos empréstimos e os registros de tentativas de login são apagados; a senha é invalidada e as sessões abertas são encerradas. Não é possível encerrar a conta com empréstimo em aberto, porque a instituição precisa saber quem está com cada equipamento. A operação não pode ser desfeita.
 * **Demais solicitações:** A correção de dados (Art. 18, III) e qualquer outro pedido que não esteja disponível em "Meu Perfil" devem ser feitos pelo canal do encarregado (seção 6). A resposta completa é fornecida em até 15 dias (Art. 19, II).
 
 | Direito (Art. 18) | Como é atendido | Onde no sistema |
@@ -54,8 +54,10 @@ Os titulares podem exercer seus direitos de forma automatizada:
 
 ### 5. Retenção dos Dados
 
-* Os dados são mantidos enquanto a conta estiver ativa ou suspensa.
-* Após o encerramento da conta, permanecem apenas o histórico de empréstimos e os registros de auditoria, vinculados à conta já anonimizada. Eles são mantidos para o controle patrimonial dos equipamentos e para a segurança do sistema (Art. 16 da LGPD). Os registros de auditoria são protegidos contra alteração e exclusão.
+* Os dados da conta são mantidos enquanto ela estiver ativa. Conta suspensa por revogação do consentimento é anonimizada depois de 12 meses sem reativação.
+* Após o encerramento da conta, permanecem apenas o histórico de empréstimos, o histórico de consentimento e os registros de auditoria, vinculados à conta já anonimizada (Art. 16, I, e Art. 8º, § 2º).
+* Prazos de eliminação automática: links de recuperação de senha, 7 dias após expirar; tentativas de login, 30 dias; notificações, 90 dias; empréstimos encerrados e registros de auditoria, 5 anos. Os registros de auditoria não podem ser alterados, e só podem ser excluídos depois desse prazo.
+* Os backups do banco de dados são guardados por no máximo 35 dias, em rodízio; depois disso, um dado eliminado deixa de existir também nas cópias.
 
 ### 6. Contato do Encarregado
 
