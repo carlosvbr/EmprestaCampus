@@ -29,7 +29,7 @@ O mapeamento não existe só neste documento. Ele está no código, em `usuarios
 
 ## 3. Mapeamento campo a campo
 
-Os prazos marcados com **(automático)** são aplicados pela rotina de retenção do item 4.10. Os demais acompanham a vida da conta.
+Os prazos marcados com **(automático)** são aplicados pela rotina de retenção (ver `Eliminação e Retenção de Dados.md`). Os demais acompanham a vida da conta.
 
 ### 3.1 Conta do usuário (`usuarios.Usuario`)
 
@@ -45,7 +45,7 @@ Os prazos marcados com **(automático)** são aplicados pela rotina de retençã
 | `is_active` | Conta ativa ou suspensa | `acesso` | Enquanto a conta existir |
 | `date_joined` | Data de criação da conta | `acesso` | Enquanto a conta existir |
 | `last_login` | Data do último login | `seguranca` | Enquanto a conta existir |
-| `consentimento_dados`, `data_consentimento`, `versao_documento_aceito` | Registro do aceite da política | `consentimento` | Mantido junto à conta, inclusive após a anonimização, como prova do consentimento (art. 8º, § 2º) |
+| `consentimento_dados`, `data_consentimento`, `versao_documento_aceito`, `consentimento_revogado_em` | Registro do aceite da política e da revogação | `consentimento` | Mantido junto à conta, inclusive após a anonimização, como prova do consentimento (art. 8º, § 2º) |
 
 **Histórico de consentimento por finalidade (`usuarios.ConsentimentoFinalidade`):** os campos `usuario`, `finalidade`, `aceito`, `data_hora` e `versao_politica` registram cada aceite e cada recusa das finalidades opcionais. Finalidade: `consentimento`. Retenção: igual à do registro do aceite. Os registros nunca são alterados; cada mudança vira uma linha nova.
 
@@ -63,16 +63,16 @@ Os prazos marcados com **(automático)** são aplicados pela rotina de retençã
 
 | Modelo | Campo | Dado | Finalidade | Retenção |
 |---|---|---|---|---|
-| `Emprestimo` | `usuario`, `equipamento`, datas, `status`, `prorrogacao_solicitada` | Histórico de empréstimos | `emprestimo` | **5 anos** após a devolução, para o controle patrimonial; após o encerramento da conta, fica ligado à conta anonimizada |
+| `Emprestimo` | `usuario`, `equipamento`, datas, `status`, `prorrogacao_solicitada` | Histórico de empréstimos | `emprestimo` | **5 anos** após a devolução **(automático)**, para o controle patrimonial; após o encerramento da conta, fica ligado à conta anonimizada |
 | `Emprestimo` | `observacoes` | Texto livre do titular | `emprestimo` | Apagado no encerramento da conta, porque pode conter dado pessoal |
-| `Notificacao` | `usuario`, `mensagem`, `tipo`, `lida`, `data_criacao` | Avisos enviados ao titular | `comunicacao`; `avisos_emprestimo` (só gravados com consentimento) | Lidas: **90 dias** **(automático)**; todas: apagadas no encerramento |
+| `Notificacao` | `usuario`, `mensagem`, `tipo`, `lida`, `data_criacao` | Avisos enviados ao titular | `comunicacao`; `avisos_emprestimo` (só gravados com consentimento) | **90 dias** **(automático)**; todas: apagadas no encerramento |
 
 ### 3.4 Segurança e auditoria
 
 | Modelo | Campo | Dado | Finalidade | Retenção |
 |---|---|---|---|---|
-| `RegistroAuditoria` | `usuario`, `acao`, `modulo_afetado`, `descricao`, `ip_origem`, `data_hora` | Trilha de auditoria, com IP | `seguranca` | **5 anos**; imutável (trigger no PostgreSQL). A justificativa para mantê-la após o encerramento da conta está no item 4.10 |
-| `admin.LogEntry` | `user`, `action_time`, `object_repr`, `change_message` etc. | Alterações feitas pelos administradores no `/admin/` | `seguranca` | **5 anos** |
+| `RegistroAuditoria` | `usuario`, `acao`, `modulo_afetado`, `descricao`, `ip_origem`, `data_hora` | Trilha de auditoria, com IP | `seguranca` | **5 anos** **(automático)**; imutável durante esse prazo (trigger no PostgreSQL). A justificativa para mantê-la após o encerramento da conta está em `Eliminação e Retenção de Dados.md` |
+| `admin.LogEntry` | `user`, `action_time`, `object_repr`, `change_message` etc. | Alterações feitas pelos administradores no `/admin/` | `seguranca` | **5 anos** **(automático)** |
 | `axes.AccessAttempt` | `username`, `ip_address`, `user_agent`, `post_data` etc. | Tentativas de login erradas, para o bloqueio contra força bruta | `seguranca` | **30 dias** após a tentativa **(automático)**. A senha digitada **não** é guardada: o `django-axes` a substitui por `********` |
 | Sessão (`django_session`) | Identificador da sessão e do usuário | Manter o titular logado | `acesso` | 30 minutos de inatividade; sessões expiradas apagadas diariamente **(automático)** |
 | Cookie `fuso_horario_usuario` | Fuso horário do navegador | Exibir datas no horário local | `acesso` | 1 ano, **só no navegador**; não é gravado no servidor |
@@ -116,7 +116,7 @@ Isso não depende só do formulário. A API de cadastro aceita somente os campos
 ## 5. Relação com os demais itens
 
 - **4.5 — Consentimento por finalidade:** as finalidades `avisos_emprestimo` e `contato_alternativo` dependem de consentimento próprio, separado do aceite da política (modelo `ConsentimentoFinalidade`; testes em `usuarios/testes_consentimento.py`).
-- **4.10 — Eliminação e retenção:** os prazos marcados como **(automático)** na seção 3 são aplicados pela rotina de retenção, e o encerramento da conta passa a cobrir todos os campos indicados como "apagado no encerramento".
+- **4.10 — Eliminação e retenção:** os prazos marcados como **(automático)** na seção 3 são aplicados pelo comando `aplicar_retencao`, e o encerramento da conta elimina todos os vínculos do titular. Os detalhes, a justificativa do art. 16 e a política de backups estão em `Eliminação e Retenção de Dados.md`.
 
 ## 6. Como a completude do mapeamento é verificada
 
