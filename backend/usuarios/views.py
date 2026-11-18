@@ -24,6 +24,7 @@ from notificacoes.utils import enviar_email, notificar
 from auditoria.models import RegistroAuditoria
 from auditoria.utils import get_client_ip
 from .models import TokenRecuperacaoSenha, Usuario
+from .retencao import anonimizar_usuario, tem_emprestimo_em_aberto
 from .serializers import RegistroSerializer
 
 
@@ -373,6 +374,7 @@ def revogar_consentimento_view(request):
 
         if usuario.consentimento_dados:
             usuario.consentimento_dados = False
+            usuario.consentimento_revogado_em = timezone.now()
             usuario.is_active = False
             usuario.save()
 
@@ -389,6 +391,7 @@ def revogar_consentimento_view(request):
 
         else:
             usuario.consentimento_dados = True
+            usuario.consentimento_revogado_em = None
             usuario.data_consentimento = timezone.now()
             usuario.versao_documento_aceito = settings.VERSAO_POLITICA_PRIVACIDADE
             usuario.is_active = True
@@ -450,33 +453,33 @@ def atualizar_consentimentos_view(request):
 
 @login_required
 def encerrar_conta_view(request):
+    """
+    Encerramento da conta (LGPD, art. 18, IV e VI): anonimiza a conta e
+    elimina os dados ligados a ela (ver usuarios/retencao.py).
+
+    Não é permitido com empréstimo em aberto: enquanto o titular está com
+    um equipamento, ou pode vir a estar, a instituição precisa saber quem é.
+    """
     if request.method == 'POST':
         usuario = request.user
-        ip = get_client_ip(request)
 
-        prefixo = f"anon_{usuario.id}"
+        if tem_emprestimo_em_aberto(usuario):
+            messages.error(
+                request,
+                "Você tem empréstimos em aberto. Devolva os equipamentos ou aguarde a "
+                "decisão das solicitações pendentes antes de encerrar a conta."
+            )
+            return redirect('perfil')
 
         RegistroAuditoria.objects.create(
             usuario=usuario,
             acao='DELETE',
             modulo_afetado='Privacidade/LGPD',
             descricao='Usuário solicitou encerramento de conta. Dados pessoais anonimizados.',
-            ip_origem=ip
+            ip_origem=get_client_ip(request)
         )
 
-        DispositivoTOTP.objects.filter(user=usuario).delete()
-        TokenRecuperacaoSenha.objects.filter(usuario=usuario).delete()
-
-        usuario.username = prefixo
-        usuario.first_name = "Usuário"
-        usuario.last_name = "Anonimizado"
-        usuario.email = f"{prefixo}@emprestacampus.local"
-        usuario.matricula = prefixo
-        usuario.telefone = None
-
-        usuario.is_active = False
-        usuario.set_unusable_password()
-        usuario.save()
+        anonimizar_usuario(usuario)
         logout(request)
 
         messages.success(request, "Conta encerrada. Seus dados pessoais foram anonimizados irreversivelmente.")
@@ -672,6 +675,7 @@ def reativar_conta_lgpd_view(request):
 
     if request.method == 'POST':
         usuario.consentimento_dados = True
+        usuario.consentimento_revogado_em = None
         usuario.data_consentimento = timezone.now()
         usuario.versao_documento_aceito = settings.VERSAO_POLITICA_PRIVACIDADE
         usuario.is_active = True
